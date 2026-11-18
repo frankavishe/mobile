@@ -3,11 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'core/auth/session.dart';
+import 'features/auth/code_screen.dart';
+import 'features/auth/phone_screen.dart';
+import 'features/home/home_screen.dart';
 import 'features/splash/splash_screen.dart';
 
 abstract final class Routes {
   static const splash = '/splash';
   static const signIn = '/sign-in';
+  static const signInCode = '/sign-in/code';
   static const profileSetup = '/profile-setup';
   static const home = '/';
 }
@@ -45,16 +49,19 @@ final routerProvider = Provider<GoRouter>((ref) {
         sessionRedirect(ref.read(sessionProvider), state.matchedLocation),
     routes: [
       GoRoute(path: Routes.splash, builder: (_, _) => const SplashScreen()),
-      // Placeholders until Phase C (sign-in, home) and Phase D (profile setup).
       GoRoute(
         path: Routes.signIn,
-        builder: (_, _) => const _Placeholder('Sign in'),
+        builder: (_, _) => const PhoneScreen(),
+        routes: [
+          GoRoute(path: 'code', builder: (_, _) => const CodeScreen()),
+        ],
       ),
+      // Placeholder until profile setup (T047).
       GoRoute(
         path: Routes.profileSetup,
         builder: (_, _) => const _Placeholder('Profile setup'),
       ),
-      GoRoute(path: Routes.home, builder: (_, _) => const _Placeholder('Chats')),
+      GoRoute(path: Routes.home, builder: (_, _) => const HomeScreen()),
     ],
   );
   ref.onDispose(router.dispose);

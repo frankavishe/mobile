@@ -1,10 +1,13 @@
 import 'package:chat_app/app.dart';
 import 'package:chat_app/core/api/models/models.dart';
 import 'package:chat_app/core/auth/session.dart';
+import 'package:chat_app/core/realtime/socket_service.dart';
 import 'package:chat_app/router.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'support/fakes.dart';
 
 const _me = Me(
   id: 'u1',
@@ -49,7 +52,9 @@ void main() {
   });
 
   testWidgets('app follows the session from splash to sign-in', (tester) async {
-    final container = ProviderContainer();
+    final container = ProviderContainer(overrides: [
+      socketServiceProvider.overrideWithValue(FakeSocketService()),
+    ]);
     addTearDown(container.dispose);
 
     await tester.pumpWidget(

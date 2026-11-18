@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/theme.dart';
+import 'features/auth/auth_controller.dart';
 import 'router.dart';
 
 class ChatApp extends ConsumerWidget {
@@ -9,6 +10,8 @@ class ChatApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Connects the socket while signed in and handles remote sign-out.
+    ref.watch(sessionLifecycleProvider);
     return MaterialApp.router(
       title: 'Chat App',
       debugShowCheckedModeBanner: false,

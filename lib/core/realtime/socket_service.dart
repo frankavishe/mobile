@@ -109,7 +109,7 @@ class SocketService {
       Map<String, dynamic>.from(data as Map);
 }
 
-/// Connected while signed in; Phase C wires its streams into the auth controller.
+/// Connected while signed in by `sessionLifecycleProvider` (features/auth/auth_controller.dart).
 final socketServiceProvider = Provider<SocketService>((ref) {
   final service = SocketService(
     accessToken: () => ref.read(sessionProvider).accessToken,
