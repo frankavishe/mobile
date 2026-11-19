@@ -257,6 +257,18 @@ class ApiClient {
         return PublicUser.fromJson(res.data!);
       });
 
+  // ---- keys ----
+
+  /// `PUT /keys`. The first upload (or a new identity key) must include the signed prekey.
+  Future<void> uploadKeys(UploadKeysBody body) =>
+      _call(() => dio.put<void>('/keys', data: body.toJson()));
+
+  /// Unused one-time prekeys the server still holds for this device.
+  Future<int> getKeyCount() => _call(() async {
+        final res = await dio.get<Map<String, dynamic>>('/keys/count');
+        return res.data!['count'] as int;
+      });
+
   static List<PublicUser> _users(List<dynamic> data) =>
       data.map((j) => PublicUser.fromJson(j as Map<String, dynamic>)).toList();
 

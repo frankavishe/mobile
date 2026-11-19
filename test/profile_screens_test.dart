@@ -62,6 +62,7 @@ void main() {
     container = ProviderContainer(overrides: [
       apiClientProvider.overrideWithValue(api),
       socketServiceProvider.overrideWithValue(socket),
+      ...localDataOverrides(),
       secureStoreProvider.overrideWithValue(MemorySecureStore()),
       avatarPickerProvider.overrideWithValue((source) async {
         picked.add(source);

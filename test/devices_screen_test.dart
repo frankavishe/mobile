@@ -58,6 +58,7 @@ void main() {
     container = ProviderContainer(overrides: [
       apiClientProvider.overrideWithValue(api),
       socketServiceProvider.overrideWithValue(FakeSocketService()),
+      ...localDataOverrides(),
       secureStoreProvider.overrideWithValue(MemorySecureStore()),
     ]);
     addTearDown(container.dispose);

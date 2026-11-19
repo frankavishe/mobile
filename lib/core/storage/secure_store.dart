@@ -11,6 +11,10 @@ abstract interface class SecureStore {
   Future<DateTime?> readContactsSyncedAt();
   Future<void> writeContactsSyncedAt(DateTime at);
 
+  /// Hex key of the SQLCipher database. Removed by [clear], which makes the database unreadable.
+  Future<String?> readDbKey();
+  Future<void> writeDbKey(String hexKey);
+
   /// Removes everything this app stored (sign-out, revoked device).
   Future<void> clear();
 }
@@ -21,6 +25,7 @@ class FlutterSecureStore implements SecureStore {
 
   static const _refreshTokenKey = 'refresh_token';
   static const _contactsSyncedAtKey = 'contacts_synced_at';
+  static const _dbKeyKey = 'db_key';
 
   final FlutterSecureStorage _storage;
 
@@ -42,6 +47,12 @@ class FlutterSecureStore implements SecureStore {
       _storage.write(key: _contactsSyncedAtKey, value: at.toUtc().toIso8601String());
 
   @override
+  Future<String?> readDbKey() => _storage.read(key: _dbKeyKey);
+
+  @override
+  Future<void> writeDbKey(String hexKey) => _storage.write(key: _dbKeyKey, value: hexKey);
+
+  @override
   Future<void> clear() => _storage.deleteAll();
 }
 
@@ -51,6 +62,7 @@ class MemorySecureStore implements SecureStore {
 
   String? refreshToken;
   DateTime? contactsSyncedAt;
+  String? dbKey;
 
   @override
   Future<String?> readRefreshToken() async => refreshToken;
@@ -65,9 +77,16 @@ class MemorySecureStore implements SecureStore {
   Future<void> writeContactsSyncedAt(DateTime at) async => contactsSyncedAt = at;
 
   @override
+  Future<String?> readDbKey() async => dbKey;
+
+  @override
+  Future<void> writeDbKey(String hexKey) async => dbKey = hexKey;
+
+  @override
   Future<void> clear() async {
     refreshToken = null;
     contactsSyncedAt = null;
+    dbKey = null;
   }
 }
 

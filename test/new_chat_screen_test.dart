@@ -48,6 +48,7 @@ void main() {
     container = ProviderContainer(overrides: [
       apiClientProvider.overrideWithValue(api),
       socketServiceProvider.overrideWithValue(FakeSocketService()),
+      ...localDataOverrides(),
       secureStoreProvider.overrideWithValue(MemorySecureStore()),
       addressBookProvider.overrideWithValue(book),
     ]);

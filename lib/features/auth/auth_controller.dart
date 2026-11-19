@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/models/models.dart';
 import '../../core/auth/session.dart';
+import '../../core/crypto/key_manager.dart';
+import '../../core/db/db_opener.dart';
 import '../../core/realtime/socket_service.dart';
 import '../../core/storage/secure_store.dart';
 
@@ -139,11 +141,26 @@ class AuthController extends Notifier<SignInState> {
 final authControllerProvider =
     NotifierProvider<AuthController, SignInState>(AuthController.new);
 
-/// Keeps the realtime connection in step with the session: connects while signed in and
-/// applies `device:revoked` (wipe storage, back to sign-in) and `profile:updated`.
+/// Keeps the device in step with the session:
+/// - while signed in: realtime connection, `device:revoked` (back to sign-in), `profile:updated`,
+///   Signal keys generated/uploaded on start and topped up on `prekeys:low`;
+/// - when the session ends (any reason): the local database, keys and tokens are wiped, because
+///   the server has already dropped this device's keys and pending messages.
 final sessionLifecycleProvider = Provider<void>((ref) {
   final socket = ref.watch(socketServiceProvider);
   final subs = <StreamSubscription<Object>>[];
+
+  // Finishes when the last wipe is done; a new session waits for it before touching the database.
+  var wiping = Future<void>.value();
+
+  Future<void> guarded(String what, Future<void> Function() fn) async {
+    try {
+      await fn();
+    } catch (e) {
+      // Keys are retried on the next start or the next `prekeys:low`.
+      debugPrint('session lifecycle: $what failed: $e');
+    }
+  }
 
   void stop() {
     for (final s in subs) {
@@ -164,14 +181,34 @@ final sessionLifecycleProvider = Provider<void>((ref) {
       }))
       ..add(socket.profileUpdated.listen(
         ref.read(sessionProvider.notifier).applyProfileUpdate,
-      ));
+      ))
+      ..add(socket.prekeysLow.listen((e) {
+        guarded('prekey top-up', () => ref.read(keyManagerProvider).topUp(e.count));
+      }));
     socket.connect();
+    final afterWipe = wiping;
+    guarded('key setup', () async {
+      await afterWipe;
+      await ref.read(keyManagerProvider).ensureKeys();
+    });
   }
 
   ref.listen<bool>(
     sessionProvider.select((s) => s.isSignedIn),
     (_, signedIn) => signedIn ? start() : stop(),
     fireImmediately: true,
+  );
+  ref.listen<SessionStatus>(
+    sessionProvider.select((s) => s.status),
+    (prev, status) {
+      if (status == SessionStatus.signedOut && prev != SessionStatus.signedOut) {
+        final before = wiping;
+        wiping = guarded('wipe', () async {
+          await before;
+          await wipeLocalData(ref);
+        });
+      }
+    },
   );
   ref.onDispose(stop);
 });

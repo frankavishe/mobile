@@ -69,6 +69,7 @@ void main() {
     container = ProviderContainer(overrides: [
       apiClientProvider.overrideWithValue(api),
       socketServiceProvider.overrideWithValue(socket),
+      ...localDataOverrides(),
       secureStoreProvider.overrideWithValue(store),
       deviceNameProvider.overrideWithValue(() async => 'Pixel 9'),
     ]);

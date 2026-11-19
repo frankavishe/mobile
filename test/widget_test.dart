@@ -54,6 +54,7 @@ void main() {
   testWidgets('app follows the session from splash to sign-in', (tester) async {
     final container = ProviderContainer(overrides: [
       socketServiceProvider.overrideWithValue(FakeSocketService()),
+      ...localDataOverrides(),
     ]);
     addTearDown(container.dispose);
 

@@ -31,12 +31,16 @@ class SocketService {
 
   final _deviceRevoked = StreamController<DeviceRevokedEvent>.broadcast();
   final _profileUpdated = StreamController<ProfileUpdatedEvent>.broadcast();
+  final _prekeysLow = StreamController<PrekeysLowEvent>.broadcast();
 
   /// This device was signed out: wipe local data and go to sign-in.
   Stream<DeviceRevokedEvent> get deviceRevoked => _deviceRevoked.stream;
 
   /// The user's own profile, or a contact's, changed.
   Stream<ProfileUpdatedEvent> get profileUpdated => _profileUpdated.stream;
+
+  /// The server is running out of this device's one-time prekeys.
+  Stream<PrekeysLowEvent> get prekeysLow => _prekeysLow.stream;
 
   bool get isConnected => _socket?.connected ?? false;
 
@@ -60,6 +64,9 @@ class SocketService {
     });
     socket.on('profile:updated', (data) {
       _profileUpdated.add(ProfileUpdatedEvent.fromJson(_map(data)));
+    });
+    socket.on('prekeys:low', (data) {
+      _prekeysLow.add(PrekeysLowEvent.fromJson(_map(data)));
     });
     socket.on('auth:expired', (_) => _refreshAndReconnect());
     socket.on('connect_error', (data) {
@@ -103,6 +110,7 @@ class SocketService {
     disconnect();
     _deviceRevoked.close();
     _profileUpdated.close();
+    _prekeysLow.close();
   }
 
   static Map<String, dynamic> _map(dynamic data) =>
