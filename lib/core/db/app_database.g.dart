@@ -1374,7 +1374,7 @@ class KvCompanion extends UpdateCompanion<KvData> {
 }
 
 class $ConversationsTable extends Conversations
-    with TableInfo<$ConversationsTable, Conversation> {
+    with TableInfo<$ConversationsTable, LocalConversation> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
@@ -1456,7 +1456,7 @@ class $ConversationsTable extends Conversations
   static const String $name = 'conversations';
   @override
   VerificationContext validateIntegrity(
-    Insertable<Conversation> instance, {
+    Insertable<LocalConversation> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -1504,9 +1504,9 @@ class $ConversationsTable extends Conversations
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
-  Conversation map(Map<String, dynamic> data, {String? tablePrefix}) {
+  LocalConversation map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return Conversation(
+    return LocalConversation(
       id: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}id'],
@@ -1545,7 +1545,8 @@ class $ConversationsTable extends Conversations
       const EnumNameConverter<ConversationKind>(ConversationKind.values);
 }
 
-class Conversation extends DataClass implements Insertable<Conversation> {
+class LocalConversation extends DataClass
+    implements Insertable<LocalConversation> {
   final String id;
   final ConversationKind kind;
 
@@ -1556,7 +1557,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
   final String? peerUserId;
   final DateTime updatedAt;
   final int unreadCount;
-  const Conversation({
+  const LocalConversation({
     required this.id,
     required this.kind,
     this.name,
@@ -1597,12 +1598,12 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     );
   }
 
-  factory Conversation.fromJson(
+  factory LocalConversation.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return Conversation(
+    return LocalConversation(
       id: serializer.fromJson<String>(json['id']),
       kind: $ConversationsTable.$converterkind.fromJson(
         serializer.fromJson<String>(json['kind']),
@@ -1628,14 +1629,14 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     };
   }
 
-  Conversation copyWith({
+  LocalConversation copyWith({
     String? id,
     ConversationKind? kind,
     Value<String?> name = const Value.absent(),
     Value<String?> peerUserId = const Value.absent(),
     DateTime? updatedAt,
     int? unreadCount,
-  }) => Conversation(
+  }) => LocalConversation(
     id: id ?? this.id,
     kind: kind ?? this.kind,
     name: name.present ? name.value : this.name,
@@ -1643,8 +1644,8 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     updatedAt: updatedAt ?? this.updatedAt,
     unreadCount: unreadCount ?? this.unreadCount,
   );
-  Conversation copyWithCompanion(ConversationsCompanion data) {
-    return Conversation(
+  LocalConversation copyWithCompanion(ConversationsCompanion data) {
+    return LocalConversation(
       id: data.id.present ? data.id.value : this.id,
       kind: data.kind.present ? data.kind.value : this.kind,
       name: data.name.present ? data.name.value : this.name,
@@ -1660,7 +1661,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
 
   @override
   String toString() {
-    return (StringBuffer('Conversation(')
+    return (StringBuffer('LocalConversation(')
           ..write('id: $id, ')
           ..write('kind: $kind, ')
           ..write('name: $name, ')
@@ -1677,7 +1678,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is Conversation &&
+      (other is LocalConversation &&
           other.id == this.id &&
           other.kind == this.kind &&
           other.name == this.name &&
@@ -1686,7 +1687,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           other.unreadCount == this.unreadCount);
 }
 
-class ConversationsCompanion extends UpdateCompanion<Conversation> {
+class ConversationsCompanion extends UpdateCompanion<LocalConversation> {
   final Value<String> id;
   final Value<ConversationKind> kind;
   final Value<String?> name;
@@ -1714,7 +1715,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
   }) : id = Value(id),
        kind = Value(kind),
        updatedAt = Value(updatedAt);
-  static Insertable<Conversation> custom({
+  static Insertable<LocalConversation> custom({
     Expression<String>? id,
     Expression<String>? kind,
     Expression<String>? name,
@@ -3114,6 +3115,549 @@ class OutboxCompanion extends UpdateCompanion<OutboxData> {
   }
 }
 
+class $KnownDevicesTable extends KnownDevices
+    with TableInfo<$KnownDevicesTable, KnownDevice> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $KnownDevicesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+    'user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [userId, deviceId];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'known_devices';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<KnownDevice> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deviceIdMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {userId, deviceId};
+  @override
+  KnownDevice map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return KnownDevice(
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}user_id'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      )!,
+    );
+  }
+
+  @override
+  $KnownDevicesTable createAlias(String alias) {
+    return $KnownDevicesTable(attachedDatabase, alias);
+  }
+}
+
+class KnownDevice extends DataClass implements Insertable<KnownDevice> {
+  final String userId;
+  final String deviceId;
+  const KnownDevice({required this.userId, required this.deviceId});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['user_id'] = Variable<String>(userId);
+    map['device_id'] = Variable<String>(deviceId);
+    return map;
+  }
+
+  KnownDevicesCompanion toCompanion(bool nullToAbsent) {
+    return KnownDevicesCompanion(
+      userId: Value(userId),
+      deviceId: Value(deviceId),
+    );
+  }
+
+  factory KnownDevice.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return KnownDevice(
+      userId: serializer.fromJson<String>(json['userId']),
+      deviceId: serializer.fromJson<String>(json['deviceId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'userId': serializer.toJson<String>(userId),
+      'deviceId': serializer.toJson<String>(deviceId),
+    };
+  }
+
+  KnownDevice copyWith({String? userId, String? deviceId}) => KnownDevice(
+    userId: userId ?? this.userId,
+    deviceId: deviceId ?? this.deviceId,
+  );
+  KnownDevice copyWithCompanion(KnownDevicesCompanion data) {
+    return KnownDevice(
+      userId: data.userId.present ? data.userId.value : this.userId,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('KnownDevice(')
+          ..write('userId: $userId, ')
+          ..write('deviceId: $deviceId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(userId, deviceId);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is KnownDevice &&
+          other.userId == this.userId &&
+          other.deviceId == this.deviceId);
+}
+
+class KnownDevicesCompanion extends UpdateCompanion<KnownDevice> {
+  final Value<String> userId;
+  final Value<String> deviceId;
+  final Value<int> rowid;
+  const KnownDevicesCompanion({
+    this.userId = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  KnownDevicesCompanion.insert({
+    required String userId,
+    required String deviceId,
+    this.rowid = const Value.absent(),
+  }) : userId = Value(userId),
+       deviceId = Value(deviceId);
+  static Insertable<KnownDevice> custom({
+    Expression<String>? userId,
+    Expression<String>? deviceId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (userId != null) 'user_id': userId,
+      if (deviceId != null) 'device_id': deviceId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  KnownDevicesCompanion copyWith({
+    Value<String>? userId,
+    Value<String>? deviceId,
+    Value<int>? rowid,
+  }) {
+    return KnownDevicesCompanion(
+      userId: userId ?? this.userId,
+      deviceId: deviceId ?? this.deviceId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
+    }
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('KnownDevicesCompanion(')
+          ..write('userId: $userId, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CachedUsersTable extends CachedUsers
+    with TableInfo<$CachedUsersTable, CachedUser> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CachedUsersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _displayNameMeta = const VerificationMeta(
+    'displayName',
+  );
+  @override
+  late final GeneratedColumn<String> displayName = GeneratedColumn<String>(
+    'display_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _phoneMeta = const VerificationMeta('phone');
+  @override
+  late final GeneratedColumn<String> phone = GeneratedColumn<String>(
+    'phone',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _avatarThumbUrlMeta = const VerificationMeta(
+    'avatarThumbUrl',
+  );
+  @override
+  late final GeneratedColumn<String> avatarThumbUrl = GeneratedColumn<String>(
+    'avatar_thumb_url',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    displayName,
+    phone,
+    avatarThumbUrl,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cached_users';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CachedUser> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('display_name')) {
+      context.handle(
+        _displayNameMeta,
+        displayName.isAcceptableOrUnknown(
+          data['display_name']!,
+          _displayNameMeta,
+        ),
+      );
+    }
+    if (data.containsKey('phone')) {
+      context.handle(
+        _phoneMeta,
+        phone.isAcceptableOrUnknown(data['phone']!, _phoneMeta),
+      );
+    }
+    if (data.containsKey('avatar_thumb_url')) {
+      context.handle(
+        _avatarThumbUrlMeta,
+        avatarThumbUrl.isAcceptableOrUnknown(
+          data['avatar_thumb_url']!,
+          _avatarThumbUrlMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CachedUser map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CachedUser(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      displayName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}display_name'],
+      ),
+      phone: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}phone'],
+      ),
+      avatarThumbUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}avatar_thumb_url'],
+      ),
+    );
+  }
+
+  @override
+  $CachedUsersTable createAlias(String alias) {
+    return $CachedUsersTable(attachedDatabase, alias);
+  }
+}
+
+class CachedUser extends DataClass implements Insertable<CachedUser> {
+  final String id;
+  final String? displayName;
+  final String? phone;
+  final String? avatarThumbUrl;
+  const CachedUser({
+    required this.id,
+    this.displayName,
+    this.phone,
+    this.avatarThumbUrl,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    if (!nullToAbsent || displayName != null) {
+      map['display_name'] = Variable<String>(displayName);
+    }
+    if (!nullToAbsent || phone != null) {
+      map['phone'] = Variable<String>(phone);
+    }
+    if (!nullToAbsent || avatarThumbUrl != null) {
+      map['avatar_thumb_url'] = Variable<String>(avatarThumbUrl);
+    }
+    return map;
+  }
+
+  CachedUsersCompanion toCompanion(bool nullToAbsent) {
+    return CachedUsersCompanion(
+      id: Value(id),
+      displayName: displayName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(displayName),
+      phone: phone == null && nullToAbsent
+          ? const Value.absent()
+          : Value(phone),
+      avatarThumbUrl: avatarThumbUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(avatarThumbUrl),
+    );
+  }
+
+  factory CachedUser.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CachedUser(
+      id: serializer.fromJson<String>(json['id']),
+      displayName: serializer.fromJson<String?>(json['displayName']),
+      phone: serializer.fromJson<String?>(json['phone']),
+      avatarThumbUrl: serializer.fromJson<String?>(json['avatarThumbUrl']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'displayName': serializer.toJson<String?>(displayName),
+      'phone': serializer.toJson<String?>(phone),
+      'avatarThumbUrl': serializer.toJson<String?>(avatarThumbUrl),
+    };
+  }
+
+  CachedUser copyWith({
+    String? id,
+    Value<String?> displayName = const Value.absent(),
+    Value<String?> phone = const Value.absent(),
+    Value<String?> avatarThumbUrl = const Value.absent(),
+  }) => CachedUser(
+    id: id ?? this.id,
+    displayName: displayName.present ? displayName.value : this.displayName,
+    phone: phone.present ? phone.value : this.phone,
+    avatarThumbUrl: avatarThumbUrl.present
+        ? avatarThumbUrl.value
+        : this.avatarThumbUrl,
+  );
+  CachedUser copyWithCompanion(CachedUsersCompanion data) {
+    return CachedUser(
+      id: data.id.present ? data.id.value : this.id,
+      displayName: data.displayName.present
+          ? data.displayName.value
+          : this.displayName,
+      phone: data.phone.present ? data.phone.value : this.phone,
+      avatarThumbUrl: data.avatarThumbUrl.present
+          ? data.avatarThumbUrl.value
+          : this.avatarThumbUrl,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CachedUser(')
+          ..write('id: $id, ')
+          ..write('displayName: $displayName, ')
+          ..write('phone: $phone, ')
+          ..write('avatarThumbUrl: $avatarThumbUrl')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, displayName, phone, avatarThumbUrl);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CachedUser &&
+          other.id == this.id &&
+          other.displayName == this.displayName &&
+          other.phone == this.phone &&
+          other.avatarThumbUrl == this.avatarThumbUrl);
+}
+
+class CachedUsersCompanion extends UpdateCompanion<CachedUser> {
+  final Value<String> id;
+  final Value<String?> displayName;
+  final Value<String?> phone;
+  final Value<String?> avatarThumbUrl;
+  final Value<int> rowid;
+  const CachedUsersCompanion({
+    this.id = const Value.absent(),
+    this.displayName = const Value.absent(),
+    this.phone = const Value.absent(),
+    this.avatarThumbUrl = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CachedUsersCompanion.insert({
+    required String id,
+    this.displayName = const Value.absent(),
+    this.phone = const Value.absent(),
+    this.avatarThumbUrl = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id);
+  static Insertable<CachedUser> custom({
+    Expression<String>? id,
+    Expression<String>? displayName,
+    Expression<String>? phone,
+    Expression<String>? avatarThumbUrl,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (displayName != null) 'display_name': displayName,
+      if (phone != null) 'phone': phone,
+      if (avatarThumbUrl != null) 'avatar_thumb_url': avatarThumbUrl,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CachedUsersCompanion copyWith({
+    Value<String>? id,
+    Value<String?>? displayName,
+    Value<String?>? phone,
+    Value<String?>? avatarThumbUrl,
+    Value<int>? rowid,
+  }) {
+    return CachedUsersCompanion(
+      id: id ?? this.id,
+      displayName: displayName ?? this.displayName,
+      phone: phone ?? this.phone,
+      avatarThumbUrl: avatarThumbUrl ?? this.avatarThumbUrl,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (displayName.present) {
+      map['display_name'] = Variable<String>(displayName.value);
+    }
+    if (phone.present) {
+      map['phone'] = Variable<String>(phone.value);
+    }
+    if (avatarThumbUrl.present) {
+      map['avatar_thumb_url'] = Variable<String>(avatarThumbUrl.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CachedUsersCompanion(')
+          ..write('id: $id, ')
+          ..write('displayName: $displayName, ')
+          ..write('phone: $phone, ')
+          ..write('avatarThumbUrl: $avatarThumbUrl, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3129,6 +3673,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $MembersTable members = $MembersTable(this);
   late final $MessagesTable messages = $MessagesTable(this);
   late final $OutboxTable outbox = $OutboxTable(this);
+  late final $KnownDevicesTable knownDevices = $KnownDevicesTable(this);
+  late final $CachedUsersTable cachedUsers = $CachedUsersTable(this);
   late final Index messagesByConversation = Index(
     'messages_by_conversation',
     'CREATE INDEX messages_by_conversation ON messages (conversation_id, sent_at)',
@@ -3148,6 +3694,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     members,
     messages,
     outbox,
+    knownDevices,
+    cachedUsers,
     messagesByConversation,
   ];
   @override
@@ -4099,7 +4647,8 @@ typedef $$ConversationsTableUpdateCompanionBuilder =
     });
 
 final class $$ConversationsTableReferences
-    extends BaseReferences<_$AppDatabase, $ConversationsTable, Conversation> {
+    extends
+        BaseReferences<_$AppDatabase, $ConversationsTable, LocalConversation> {
   $$ConversationsTableReferences(
     super.$_db,
     super.$_table,
@@ -4363,14 +4912,14 @@ class $$ConversationsTableTableManager
         RootTableManager<
           _$AppDatabase,
           $ConversationsTable,
-          Conversation,
+          LocalConversation,
           $$ConversationsTableFilterComposer,
           $$ConversationsTableOrderingComposer,
           $$ConversationsTableAnnotationComposer,
           $$ConversationsTableCreateCompanionBuilder,
           $$ConversationsTableUpdateCompanionBuilder,
-          (Conversation, $$ConversationsTableReferences),
-          Conversation,
+          (LocalConversation, $$ConversationsTableReferences),
+          LocalConversation,
           PrefetchHooks Function({bool membersRefs, bool messagesRefs})
         > {
   $$ConversationsTableTableManager(_$AppDatabase db, $ConversationsTable table)
@@ -4423,7 +4972,7 @@ class $$ConversationsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable<$ConversationsTable, Conversation>(table),
+                  e.readTable<$ConversationsTable, LocalConversation>(table),
                   $$ConversationsTableReferences(db, table, e),
                 ),
               )
@@ -4440,7 +4989,7 @@ class $$ConversationsTableTableManager
                 return [
                   if (membersRefs)
                     await $_getPrefetchedDataByColumns<
-                      Conversation,
+                      LocalConversation,
                       $ConversationsTable,
                       Member,
                       $MembersTable
@@ -4460,7 +5009,7 @@ class $$ConversationsTableTableManager
                     ),
                   if (messagesRefs)
                     await $_getPrefetchedDataByColumns<
-                      Conversation,
+                      LocalConversation,
                       $ConversationsTable,
                       Message,
                       $MessagesTable
@@ -4490,14 +5039,14 @@ typedef $$ConversationsTableProcessedTableManager =
     ProcessedTableManager<
       _$AppDatabase,
       $ConversationsTable,
-      Conversation,
+      LocalConversation,
       $$ConversationsTableFilterComposer,
       $$ConversationsTableOrderingComposer,
       $$ConversationsTableAnnotationComposer,
       $$ConversationsTableCreateCompanionBuilder,
       $$ConversationsTableUpdateCompanionBuilder,
-      (Conversation, $$ConversationsTableReferences),
-      Conversation,
+      (LocalConversation, $$ConversationsTableReferences),
+      LocalConversation,
       PrefetchHooks Function({bool membersRefs, bool messagesRefs})
     >;
 typedef $$MembersTableCreateCompanionBuilder =
@@ -5421,6 +5970,352 @@ typedef $$OutboxTableProcessedTableManager =
       OutboxData,
       PrefetchHooks Function()
     >;
+typedef $$KnownDevicesTableCreateCompanionBuilder =
+    KnownDevicesCompanion Function({
+      required String userId,
+      required String deviceId,
+      Value<int> rowid,
+    });
+typedef $$KnownDevicesTableUpdateCompanionBuilder =
+    KnownDevicesCompanion Function({
+      Value<String> userId,
+      Value<String> deviceId,
+      Value<int> rowid,
+    });
+
+class $$KnownDevicesTableFilterComposer
+    extends Composer<_$AppDatabase, $KnownDevicesTable> {
+  $$KnownDevicesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$KnownDevicesTableOrderingComposer
+    extends Composer<_$AppDatabase, $KnownDevicesTable> {
+  $$KnownDevicesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$KnownDevicesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $KnownDevicesTable> {
+  $$KnownDevicesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+}
+
+class $$KnownDevicesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $KnownDevicesTable,
+          KnownDevice,
+          $$KnownDevicesTableFilterComposer,
+          $$KnownDevicesTableOrderingComposer,
+          $$KnownDevicesTableAnnotationComposer,
+          $$KnownDevicesTableCreateCompanionBuilder,
+          $$KnownDevicesTableUpdateCompanionBuilder,
+          (
+            KnownDevice,
+            BaseReferences<_$AppDatabase, $KnownDevicesTable, KnownDevice>,
+          ),
+          KnownDevice,
+          PrefetchHooks Function()
+        > {
+  $$KnownDevicesTableTableManager(_$AppDatabase db, $KnownDevicesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$KnownDevicesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$KnownDevicesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$KnownDevicesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> userId = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => KnownDevicesCompanion(
+                userId: userId,
+                deviceId: deviceId,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String userId,
+                required String deviceId,
+                Value<int> rowid = const Value.absent(),
+              }) => KnownDevicesCompanion.insert(
+                userId: userId,
+                deviceId: deviceId,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$KnownDevicesTable, KnownDevice>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $KnownDevicesTable,
+                    KnownDevice
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$KnownDevicesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $KnownDevicesTable,
+      KnownDevice,
+      $$KnownDevicesTableFilterComposer,
+      $$KnownDevicesTableOrderingComposer,
+      $$KnownDevicesTableAnnotationComposer,
+      $$KnownDevicesTableCreateCompanionBuilder,
+      $$KnownDevicesTableUpdateCompanionBuilder,
+      (
+        KnownDevice,
+        BaseReferences<_$AppDatabase, $KnownDevicesTable, KnownDevice>,
+      ),
+      KnownDevice,
+      PrefetchHooks Function()
+    >;
+typedef $$CachedUsersTableCreateCompanionBuilder =
+    CachedUsersCompanion Function({
+      required String id,
+      Value<String?> displayName,
+      Value<String?> phone,
+      Value<String?> avatarThumbUrl,
+      Value<int> rowid,
+    });
+typedef $$CachedUsersTableUpdateCompanionBuilder =
+    CachedUsersCompanion Function({
+      Value<String> id,
+      Value<String?> displayName,
+      Value<String?> phone,
+      Value<String?> avatarThumbUrl,
+      Value<int> rowid,
+    });
+
+class $$CachedUsersTableFilterComposer
+    extends Composer<_$AppDatabase, $CachedUsersTable> {
+  $$CachedUsersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get phone => $composableBuilder(
+    column: $table.phone,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get avatarThumbUrl => $composableBuilder(
+    column: $table.avatarThumbUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CachedUsersTableOrderingComposer
+    extends Composer<_$AppDatabase, $CachedUsersTable> {
+  $$CachedUsersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get phone => $composableBuilder(
+    column: $table.phone,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get avatarThumbUrl => $composableBuilder(
+    column: $table.avatarThumbUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CachedUsersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CachedUsersTable> {
+  $$CachedUsersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get phone =>
+      $composableBuilder(column: $table.phone, builder: (column) => column);
+
+  GeneratedColumn<String> get avatarThumbUrl => $composableBuilder(
+    column: $table.avatarThumbUrl,
+    builder: (column) => column,
+  );
+}
+
+class $$CachedUsersTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CachedUsersTable,
+          CachedUser,
+          $$CachedUsersTableFilterComposer,
+          $$CachedUsersTableOrderingComposer,
+          $$CachedUsersTableAnnotationComposer,
+          $$CachedUsersTableCreateCompanionBuilder,
+          $$CachedUsersTableUpdateCompanionBuilder,
+          (
+            CachedUser,
+            BaseReferences<_$AppDatabase, $CachedUsersTable, CachedUser>,
+          ),
+          CachedUser,
+          PrefetchHooks Function()
+        > {
+  $$CachedUsersTableTableManager(_$AppDatabase db, $CachedUsersTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CachedUsersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CachedUsersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CachedUsersTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String?> displayName = const Value.absent(),
+                Value<String?> phone = const Value.absent(),
+                Value<String?> avatarThumbUrl = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CachedUsersCompanion(
+                id: id,
+                displayName: displayName,
+                phone: phone,
+                avatarThumbUrl: avatarThumbUrl,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                Value<String?> displayName = const Value.absent(),
+                Value<String?> phone = const Value.absent(),
+                Value<String?> avatarThumbUrl = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CachedUsersCompanion.insert(
+                id: id,
+                displayName: displayName,
+                phone: phone,
+                avatarThumbUrl: avatarThumbUrl,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$CachedUsersTable, CachedUser>(table),
+                  BaseReferences<_$AppDatabase, $CachedUsersTable, CachedUser>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CachedUsersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CachedUsersTable,
+      CachedUser,
+      $$CachedUsersTableFilterComposer,
+      $$CachedUsersTableOrderingComposer,
+      $$CachedUsersTableAnnotationComposer,
+      $$CachedUsersTableCreateCompanionBuilder,
+      $$CachedUsersTableUpdateCompanionBuilder,
+      (
+        CachedUser,
+        BaseReferences<_$AppDatabase, $CachedUsersTable, CachedUser>,
+      ),
+      CachedUser,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -5444,4 +6339,8 @@ class $AppDatabaseManager {
       $$MessagesTableTableManager(_db, _db.messages);
   $$OutboxTableTableManager get outbox =>
       $$OutboxTableTableManager(_db, _db.outbox);
+  $$KnownDevicesTableTableManager get knownDevices =>
+      $$KnownDevicesTableTableManager(_db, _db.knownDevices);
+  $$CachedUsersTableTableManager get cachedUsers =>
+      $$CachedUsersTableTableManager(_db, _db.cachedUsers);
 }

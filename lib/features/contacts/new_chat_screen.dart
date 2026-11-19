@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:phone_numbers_parser/phone_numbers_parser.dart';
 
 import '../../core/api/api_client.dart';
@@ -9,6 +10,8 @@ import '../../core/api/models/models.dart';
 import '../../core/auth/session.dart';
 import '../../core/phone.dart';
 import '../../core/widgets/country_picker.dart';
+import '../../router.dart';
+import '../chat/messaging_service.dart';
 import '../profile/widgets/avatar_editor.dart';
 import 'contacts_repository.dart';
 
@@ -40,8 +43,8 @@ class _Failed extends _Lookup {
   final String text;
 }
 
-/// New chat (T065): contacts on the app, plus lookup of any number. Starting a conversation
-/// arrives with messaging (feature 002); for now a contact opens their profile.
+/// New chat (T065): contacts on the app, plus lookup of any number. Tapping someone opens the
+/// direct chat with them.
 class NewChatScreen extends ConsumerStatefulWidget {
   const NewChatScreen({super.key});
 
@@ -54,6 +57,9 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
   late IsoCode _country;
   _Lookup _lookup = const _Idle();
   late final AppLifecycleListener _lifecycle;
+
+  /// The user whose chat is being opened.
+  String? _opening;
 
   ContactsRepository get _contacts => ref.read(contactsProvider.notifier);
 
@@ -121,12 +127,20 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
     }
   }
 
-  void _showProfile(PublicUser user) {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => _ProfileSheet(user: user),
-    );
+  /// Creates (or finds) the direct chat with [user] and replaces this screen with it.
+  Future<void> _open(PublicUser user) async {
+    if (_opening != null) return;
+    setState(() => _opening = user.id);
+    try {
+      final id = await ref.read(messagingServiceProvider).startDirect(user);
+      if (mounted) context.pushReplacement(Routes.chatOf(id));
+    } on ApiError catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(errorMessage(e))));
+    } finally {
+      if (mounted) setState(() => _opening = null);
+    }
   }
 
   @override
@@ -205,7 +219,8 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
               _Found(:final user) => _UserTile(
                   key: const Key('lookup-result'),
                   user: user,
-                  onTap: () => _showProfile(user),
+                  busy: _opening == user.id,
+                  onTap: () => _open(user),
                 ),
               _Missing(:final phone) => _Note(
                   key: const Key('lookup-missing'),
@@ -268,16 +283,27 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
         )
       else
         for (final u in list)
-          _UserTile(key: ValueKey('contact-${u.id}'), user: u, onTap: () => _showProfile(u)),
+          _UserTile(
+            key: ValueKey('contact-${u.id}'),
+            user: u,
+            busy: _opening == u.id,
+            onTap: () => _open(u),
+          ),
     ];
   }
 }
 
 class _UserTile extends StatelessWidget {
-  const _UserTile({super.key, required this.user, required this.onTap});
+  const _UserTile({
+    super.key,
+    required this.user,
+    required this.onTap,
+    this.busy = false,
+  });
 
   final PublicUser user;
   final VoidCallback onTap;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) => ListTile(
@@ -293,6 +319,12 @@ class _UserTile extends StatelessWidget {
         subtitle: user.about.isEmpty
             ? null
             : Text(user.about, maxLines: 1, overflow: TextOverflow.ellipsis),
+        trailing: busy
+            ? const SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : null,
         onTap: onTap,
       );
 }
@@ -365,53 +397,6 @@ class _AccessCard extends StatelessWidget {
                 onPressed: onPressed,
                 child: Text(action),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ProfileSheet extends StatelessWidget {
-  const _ProfileSheet({required this.user});
-
-  final PublicUser user;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final hasName = user.displayName?.isNotEmpty == true;
-    return SafeArea(
-      child: Padding(
-        key: const Key('profile-sheet'),
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Avatar(url: user.avatarUrl, name: user.displayName, radius: 48),
-            const SizedBox(height: 12),
-            Text(
-              hasName ? user.displayName! : formatPhone(user.phone),
-              style: theme.textTheme.titleLarge,
-            ),
-            if (hasName) ...[
-              const SizedBox(height: 4),
-              Text(
-                formatPhone(user.phone),
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-              ),
-            ],
-            if (user.about.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(user.about, textAlign: TextAlign.center),
-            ],
-            const SizedBox(height: 20),
-            Text(
-              'Messaging is coming in the next update.',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
           ],
         ),

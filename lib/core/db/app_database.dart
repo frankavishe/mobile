@@ -70,6 +70,7 @@ enum MessageStatus { pending, sent, delivered, read, failed }
 
 enum MessageKind { text, system }
 
+@DataClassName('LocalConversation')
 class Conversations extends Table {
   TextColumn get id => text()();
   TextColumn get kind => textEnum<ConversationKind>()();
@@ -129,6 +130,42 @@ class Outbox extends Table {
   DateTimeColumn get createdAt => dateTime()();
 }
 
+/// Devices of a user that this device fans messages out to. Corrected by the server's 409
+/// `DEVICE_MISMATCH` answers; the Signal sessions table only knows device ids.
+class KnownDevices extends Table {
+  TextColumn get userId => text()();
+  TextColumn get deviceId => text()();
+
+  @override
+  Set<Column> get primaryKey => {userId, deviceId};
+}
+
+/// Names and avatars for chat titles, from contacts, lookups and `profile:updated`.
+class CachedUsers extends Table {
+  TextColumn get id => text()();
+  TextColumn get displayName => text().nullable()();
+  TextColumn get phone => text().nullable()();
+  TextColumn get avatarThumbUrl => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One row of the chat list.
+class ChatSummary {
+  const ChatSummary({
+    required this.conversation,
+    this.lastMessage,
+    this.peer,
+  });
+
+  final LocalConversation conversation;
+  final Message? lastMessage;
+
+  /// The other user of a direct chat, when known.
+  final CachedUser? peer;
+}
+
 @DriftDatabase(tables: [
   LocalIdentity,
   RemoteIdentities,
@@ -140,15 +177,23 @@ class Outbox extends Table {
   Members,
   Messages,
   Outbox,
+  KnownDevices,
+  CachedUsers,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            await m.createTable(knownDevices);
+            await m.createTable(cachedUsers);
+          }
+        },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
         },
@@ -164,7 +209,7 @@ class AppDatabase extends _$AppDatabase {
   Future<void> writeKv(String key, String value) =>
       into(kv).insertOnConflictUpdate(KvCompanion.insert(key: key, value: value));
 
-  // --- chats (minimal; repositories come with messaging) ---------------------
+  // --- chats ------------------------------------------------------------------
 
   Future<void> upsertConversation(ConversationsCompanion c) =>
       into(conversations).insertOnConflictUpdate(c);
@@ -181,10 +226,126 @@ class AppDatabase extends _$AppDatabase {
   Future<void> insertMessage(MessagesCompanion m) =>
       into(messages).insert(m, mode: InsertMode.insertOrIgnore);
 
-  Future<List<Message>> messagesIn(String conversationId) => (select(messages)
+  SimpleSelectStatement<$MessagesTable, Message> _messagesIn(String conversationId) =>
+      select(messages)
         ..where((t) => t.conversationId.equals(conversationId))
-        ..orderBy([(t) => OrderingTerm.asc(t.sentAt)]))
-      .get();
+        // Times are stored in seconds; insertion order breaks ties.
+        ..orderBy([
+          (t) => OrderingTerm.asc(t.sentAt),
+          (t) => OrderingTerm.asc(t.rowId),
+        ]);
+
+  Future<List<Message>> messagesIn(String conversationId) =>
+      _messagesIn(conversationId).get();
+
+  /// Oldest first.
+  Stream<List<Message>> watchMessages(String conversationId) =>
+      _messagesIn(conversationId).watch();
+
+  Future<Message?> messageById(String id) =>
+      (select(messages)..where((t) => t.id.equals(id))).getSingleOrNull();
+
+  Future<LocalConversation?> conversationById(String id) =>
+      (select(conversations)..where((t) => t.id.equals(id))).getSingleOrNull();
+
+  Stream<LocalConversation?> watchConversation(String id) =>
+      (select(conversations)..where((t) => t.id.equals(id))).watchSingleOrNull();
+
+  Future<void> deleteConversation(String id) =>
+      (delete(conversations)..where((t) => t.id.equals(id))).go();
+
+  /// Moves the conversation to the top of the list.
+  Future<void> touchConversation(String id, DateTime at) =>
+      (update(conversations)..where((t) => t.id.equals(id)))
+          .write(ConversationsCompanion(updatedAt: Value(at)));
+
+  /// Sets the unread count to the number of other users' messages not yet read.
+  Future<void> recountUnread(String id, String myUserId) => customUpdate(
+        'UPDATE conversations SET unread_count = (SELECT count(*) FROM messages m '
+        'WHERE m.conversation_id = ?1 AND m.sender_user_id != ?2 '
+        "AND m.kind = 'text' AND m.status != 'read') WHERE id = ?1",
+        variables: [Variable.withString(id), Variable.withString(myUserId)],
+        updates: {conversations},
+      );
+
+  Future<void> resetUnread(String id) =>
+      (update(conversations)..where((t) => t.id.equals(id)))
+          .write(const ConversationsCompanion(unreadCount: Value(0)));
+
+  /// Marks other users' unread messages in [conversationId] as read, clears the unread count
+  /// and returns the ids that changed.
+  Future<List<String>> markIncomingRead(String conversationId, String myUserId) =>
+      transaction(() async {
+        final rows = await (select(messages)
+              ..where((t) =>
+                  t.conversationId.equals(conversationId) &
+                  t.senderUserId.equals(myUserId).not() &
+                  t.kind.equalsValue(MessageKind.text) &
+                  t.status.equalsValue(MessageStatus.read).not()))
+            .get();
+        final ids = [for (final r in rows) r.id];
+        if (ids.isNotEmpty) {
+          await (update(messages)..where((t) => t.id.isIn(ids)))
+              .write(const MessagesCompanion(status: Value(MessageStatus.read)));
+        }
+        await recountUnread(conversationId, myUserId);
+        return ids;
+      });
+
+  /// The chat list, most recent activity first.
+  Stream<List<ChatSummary>> watchChatList() {
+    final last = alias(messages, 'last_message');
+    final latestId = subqueryExpression<String>(
+      selectOnly(messages)
+        ..addColumns([messages.id])
+        ..where(messages.conversationId.equalsExp(conversations.id))
+        ..orderBy([
+          OrderingTerm.desc(messages.sentAt),
+          OrderingTerm.desc(messages.rowId),
+        ])
+        ..limit(1),
+    );
+    final query = select(conversations).join([
+      leftOuterJoin(last, last.id.equalsExp(latestId)),
+      leftOuterJoin(cachedUsers, cachedUsers.id.equalsExp(conversations.peerUserId)),
+    ])
+      ..orderBy([
+        OrderingTerm.desc(coalesce<DateTime>([last.sentAt, conversations.updatedAt])),
+      ]);
+    return query.watch().map((rows) => [
+          for (final r in rows)
+            ChatSummary(
+              conversation: r.readTable(conversations),
+              lastMessage: r.readTableOrNull(last),
+              peer: r.readTableOrNull(cachedUsers),
+            ),
+        ]);
+  }
+
+  // --- devices and users -------------------------------------------------------
+
+  Future<List<String>> devicesOf(String userId) async => [
+        for (final r
+            in await (select(knownDevices)..where((t) => t.userId.equals(userId))).get())
+          r.deviceId,
+      ];
+
+  Future<void> addDevice(String userId, String deviceId) => into(knownDevices).insert(
+        KnownDevicesCompanion.insert(userId: userId, deviceId: deviceId),
+        mode: InsertMode.insertOrIgnore,
+      );
+
+  Future<void> removeDevice(String userId, String deviceId) => (delete(knownDevices)
+        ..where((t) => t.userId.equals(userId) & t.deviceId.equals(deviceId)))
+      .go();
+
+  Future<void> cacheUser(CachedUsersCompanion u) => into(cachedUsers).insertOnConflictUpdate(u);
+
+  Future<CachedUser?> cachedUser(String id) =>
+      (select(cachedUsers)..where((t) => t.id.equals(id))).getSingleOrNull();
+
+  Stream<CachedUser?> watchCachedUser(String id) =>
+      (select(cachedUsers)..where((t) => t.id.equals(id))).watchSingleOrNull();
 
   /// Moves a message forward only (sent → delivered → read). `failed` can always be set,
   /// and a failed message can move to any state when it is retried.
@@ -209,4 +370,22 @@ class AppDatabase extends _$AppDatabase {
       .get();
 
   Future<void> removeOutbox(int id) => (delete(outbox)..where((t) => t.id.equals(id))).go();
+
+  Future<void> rescheduleOutbox(int id, {required int attempts, required DateTime next}) =>
+      (update(outbox)..where((t) => t.id.equals(id))).write(
+        OutboxCompanion(attempts: Value(attempts), nextAttemptAt: Value(next)),
+      );
+
+  /// Makes every waiting item due now (the connection is back).
+  Future<void> outboxDueNow(DateTime now) =>
+      update(outbox).write(OutboxCompanion(nextAttemptAt: Value(now)));
+
+  /// When the next outbox item becomes due, or null when the outbox is empty.
+  Future<DateTime?> nextOutboxDue() async {
+    final row = await (select(outbox)
+          ..orderBy([(t) => OrderingTerm.asc(t.nextAttemptAt)])
+          ..limit(1))
+        .getSingleOrNull();
+    return row?.nextAttemptAt;
+  }
 }

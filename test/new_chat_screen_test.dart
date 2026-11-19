@@ -4,6 +4,7 @@ import 'package:chat_app/core/api/models/models.dart';
 import 'package:chat_app/core/auth/session.dart';
 import 'package:chat_app/core/realtime/socket_service.dart';
 import 'package:chat_app/core/storage/secure_store.dart';
+import 'package:chat_app/features/chat/conversation_screen.dart';
 import 'package:chat_app/features/contacts/contacts_repository.dart';
 import 'package:chat_app/features/contacts/new_chat_screen.dart';
 import 'package:flutter/material.dart';
@@ -34,11 +35,13 @@ void main() {
   late MockApiClient api;
   late FakeAddressBook book;
   late ProviderContainer container;
+  late FakeMessagingService messaging;
 
   setUpAll(() => registerFallbackValue(<String>[]));
 
   setUp(() {
     api = MockApiClient();
+    messaging = FakeMessagingService();
     book = FakeAddressBook(numbers: ['0713 456 789']);
     when(() => api.listContacts()).thenAnswer((_) async => []);
     when(() => api.discoverContacts(any())).thenAnswer((_) async => [_amina]);
@@ -48,7 +51,7 @@ void main() {
     container = ProviderContainer(overrides: [
       apiClientProvider.overrideWithValue(api),
       socketServiceProvider.overrideWithValue(FakeSocketService()),
-      ...localDataOverrides(),
+      ...localDataOverrides(messaging: messaging),
       secureStoreProvider.overrideWithValue(MemorySecureStore()),
       addressBookProvider.overrideWithValue(book),
     ]);
@@ -148,16 +151,30 @@ void main() {
     expect(book.settingsOpened, 1);
   });
 
-  testWidgets('tapping a contact shows their profile', (tester) async {
+  testWidgets('tapping a contact opens the direct chat in place of this screen',
+      (tester) async {
     when(() => api.listContacts()).thenAnswer((_) async => [_amina]);
     await open(tester);
 
     await tester.tap(find.byKey(const ValueKey('contact-u2')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('profile-sheet')), findsOneWidget);
-    expect(find.text('+255 713 456 789'), findsOneWidget);
-    expect(find.text('Messaging is coming in the next update.'), findsOneWidget);
+    expect(messaging.startedWith.map((u) => u.id), ['u2']);
+    final screen = tester.widget<ConversationScreen>(find.byType(ConversationScreen));
+    expect(screen.conversationId, 'c-new');
+    expect(find.byType(NewChatScreen), findsNothing);
+    expect(messaging.opened, ['c-new']);
+  });
+
+  testWidgets('a looked-up number opens the chat too', (tester) async {
+    when(() => api.lookupUser(any())).thenAnswer((_) async => _amina);
+    await open(tester);
+    await search(tester, '713 456 789');
+
+    await tester.tap(find.byKey(const Key('lookup-result')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ConversationScreen), findsOneWidget);
   });
 
   testWidgets('opening the app with access checks the address book once', (tester) async {

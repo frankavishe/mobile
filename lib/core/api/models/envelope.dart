@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'api_error.dart';
+
 /// `EnvelopeType` in the contract: `prekey` starts a Signal session
 /// (PreKeySignalMessage), `whisper` is a normal SignalMessage.
 enum EnvelopeType {
@@ -96,6 +98,13 @@ class DeviceMismatch {
         'missingDevices': [for (final d in missingDevices) d.toJson()],
         'staleDevices': [for (final d in staleDevices) d.toJson()],
       };
+}
+
+/// The device lists of a 409 `DEVICE_MISMATCH`, or null for any other error.
+DeviceMismatch? deviceMismatchOf(ApiError e) {
+  final details = e.details;
+  if (e.code != ApiErrorCode.deviceMismatch || details == null) return null;
+  return DeviceMismatch.fromJson(details);
 }
 
 /// `Envelope`: a ciphertext waiting for this device. Also the payload of the

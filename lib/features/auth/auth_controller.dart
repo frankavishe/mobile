@@ -11,6 +11,7 @@ import '../../core/crypto/key_manager.dart';
 import '../../core/db/db_opener.dart';
 import '../../core/realtime/socket_service.dart';
 import '../../core/storage/secure_store.dart';
+import '../chat/messaging_service.dart';
 
 /// Name shown in the device list, e.g. "Samsung SM-A546E".
 final deviceNameProvider = Provider<Future<String> Function()>((ref) {
@@ -143,12 +144,15 @@ final authControllerProvider =
 
 /// Keeps the device in step with the session:
 /// - while signed in: realtime connection, `device:revoked` (back to sign-in), `profile:updated`,
-///   Signal keys generated/uploaded on start and topped up on `prekeys:low`;
+///   Signal keys generated/uploaded on start and topped up on `prekeys:low`, then messaging;
 /// - when the session ends (any reason): the local database, keys and tokens are wiped, because
 ///   the server has already dropped this device's keys and pending messages.
 final sessionLifecycleProvider = Provider<void>((ref) {
   final socket = ref.watch(socketServiceProvider);
   final subs = <StreamSubscription<Object>>[];
+  MessagingService? messaging;
+  // Bumped on every start/stop so work from an earlier session doesn't start messaging.
+  var generation = 0;
 
   // Finishes when the last wipe is done; a new session waits for it before touching the database.
   var wiping = Future<void>.value();
@@ -163,15 +167,19 @@ final sessionLifecycleProvider = Provider<void>((ref) {
   }
 
   void stop() {
+    generation++;
     for (final s in subs) {
       s.cancel();
     }
     subs.clear();
+    messaging?.stop();
+    messaging = null;
     socket.disconnect();
   }
 
   void start() {
     if (subs.isNotEmpty) return;
+    final gen = ++generation;
     subs
       ..add(socket.deviceRevoked.listen((e) async {
         await ref.read(secureStoreProvider).clear();
@@ -190,6 +198,14 @@ final sessionLifecycleProvider = Provider<void>((ref) {
     guarded('key setup', () async {
       await afterWipe;
       await ref.read(keyManagerProvider).ensureKeys();
+    });
+    // Messaging needs keys, but can't wait for a failed upload: without network nothing is sent
+    // anyway, and the outbox retries once keys are on the server.
+    guarded('messaging', () async {
+      await afterWipe;
+      if (gen != generation) return; // Signed out meanwhile.
+      messaging = ref.read(messagingServiceProvider);
+      messaging!.start();
     });
   }
 

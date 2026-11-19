@@ -269,6 +269,87 @@ class ApiClient {
         return res.data!['count'] as int;
       });
 
+  /// Max `deviceId` filters per `GET /users/{id}/keys`.
+  static const keysDeviceFilterMax = 5;
+
+  /// Prekey bundles for [userId]'s devices (consumes one one-time prekey each). With
+  /// [deviceIds], only those devices; more than [keysDeviceFilterMax] are fetched in chunks.
+  Future<UserKeys> getUserKeys(String userId, {List<String>? deviceIds}) =>
+      _call(() async {
+        Future<UserKeys> one(List<String>? ids) async {
+          final res = await dio.get<Map<String, dynamic>>(
+            '/users/$userId/keys',
+            queryParameters: {'deviceId': ?ids},
+            options: Options(listFormat: ListFormat.multi),
+          );
+          return UserKeys.fromJson(res.data!);
+        }
+
+        if (deviceIds == null) return one(null);
+        final devices = <DeviceBundle>[];
+        for (var i = 0; i < deviceIds.length; i += keysDeviceFilterMax) {
+          final end = i + keysDeviceFilterMax;
+          final chunk =
+              deviceIds.sublist(i, end > deviceIds.length ? deviceIds.length : end);
+          devices.addAll((await one(chunk)).devices);
+        }
+        return UserKeys(userId: userId, devices: devices);
+      });
+
+  // ---- conversations ----
+
+  Future<List<Conversation>> listConversations() => _call(() async {
+        final res = await dio.get<List<dynamic>>('/conversations');
+        return [
+          for (final j in res.data!) Conversation.fromJson(j as Map<String, dynamic>),
+        ];
+      });
+
+  Future<Conversation> getConversation(String id) => _call(() async {
+        final res = await dio.get<Map<String, dynamic>>('/conversations/$id');
+        return Conversation.fromJson(res.data!);
+      });
+
+  /// Direct chats are idempotent: the existing one is returned.
+  Future<Conversation> createConversation(CreateConversationBody body) =>
+      _call(() async {
+        final res =
+            await dio.post<Map<String, dynamic>>('/conversations', data: body.toJson());
+        return Conversation.fromJson(res.data!);
+      });
+
+  // ---- messages ----
+
+  /// Returns the server timestamp. A stale device list throws [ApiError] with
+  /// [ApiErrorCode.deviceMismatch]; read it with [deviceMismatchOf].
+  Future<DateTime> sendMessage(SendMessageBody body) => _call(() async {
+        final res =
+            await dio.post<Map<String, dynamic>>('/messages', data: body.toJson());
+        return DateTime.parse(res.data!['serverTimestamp'] as String);
+      });
+
+  /// Envelopes waiting for this device, oldest first.
+  Future<List<Envelope>> listEnvelopes({int limit = 100}) => _call(() async {
+        final res = await dio.get<List<dynamic>>(
+          '/envelopes',
+          queryParameters: {'limit': limit},
+        );
+        return [for (final j in res.data!) Envelope.fromJson(j as Map<String, dynamic>)];
+      });
+
+  /// Max ids per `POST /envelopes/ack`.
+  static const ackBatchMax = 500;
+
+  Future<void> ackEnvelopes(List<String> ids) => _call(() async {
+        for (var i = 0; i < ids.length; i += ackBatchMax) {
+          final end = i + ackBatchMax;
+          await dio.post<void>(
+            '/envelopes/ack',
+            data: {'ids': ids.sublist(i, end > ids.length ? ids.length : end)},
+          );
+        }
+      });
+
   static List<PublicUser> _users(List<dynamic> data) =>
       data.map((j) => PublicUser.fromJson(j as Map<String, dynamic>)).toList();
 

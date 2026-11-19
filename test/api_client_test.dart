@@ -183,4 +183,118 @@ void main() {
     expect(r.user.profileComplete, isTrue);
     expect(store.refreshToken, 'rt-new');
   });
+
+  group('messaging endpoints', () {
+    Map<String, dynamic> bundle(String deviceId) => {
+          'deviceId': deviceId,
+          'registrationId': 7,
+          'identityKey': 'aWs=',
+          'signedPreKey': {'keyId': 1, 'publicKey': 'cGs=', 'signature': 'c2ln'},
+          'preKey': null,
+        };
+
+    test('getUserKeys repeats deviceId and fetches more than 5 in chunks', () async {
+      final adapter = FakeAdapter((o) async {
+        final ids = (o.queryParameters['deviceId'] as List).cast<String>();
+        return json(200, {'userId': 'u2', 'devices': [for (final d in ids) bundle(d)]});
+      });
+      final ids = [for (var i = 0; i < 7; i++) 'd$i'];
+      final keys = await client(adapter).getUserKeys('u2', deviceIds: ids);
+
+      expect(keys.devices.map((d) => d.deviceId), ids);
+      expect(adapter.requests, hasLength(2));
+      expect(
+        adapter.requests.first.uri.toString(),
+        'http://api.test/v1/users/u2/keys'
+        '?deviceId=d0&deviceId=d1&deviceId=d2&deviceId=d3&deviceId=d4',
+      );
+      expect(keys.devices.first.preKey, isNull);
+    });
+
+    test('sendMessage returns the server time; 409 carries the device lists', () async {
+      var calls = 0;
+      final adapter = FakeAdapter((o) async {
+        if (calls++ == 0) return json(200, {'serverTimestamp': '2026-11-19T10:00:00.000Z'});
+        return json(409, {
+          'code': 'DEVICE_MISMATCH',
+          'message': 'Device list is out of date',
+          'details': {
+            'missingDevices': [
+              {'userId': 'u2', 'deviceId': 'd2'},
+            ],
+            'staleDevices': <Object>[],
+          },
+        });
+      });
+      final api = client(adapter);
+      const body = SendMessageBody(conversationId: 'c1', envelopes: [
+        OutgoingEnvelope(deviceId: 'd1', type: EnvelopeType.prekey, ciphertext: 'AA=='),
+      ]);
+
+      expect(await api.sendMessage(body), DateTime.utc(2026, 11, 19, 10));
+      expect(adapter.requests.single.data, {
+        'conversationId': 'c1',
+        'envelopes': [
+          {'deviceId': 'd1', 'type': 'prekey', 'ciphertext': 'AA=='},
+        ],
+      });
+
+      ApiError? error;
+      try {
+        await api.sendMessage(body);
+      } on ApiError catch (e) {
+        error = e;
+      }
+      final mismatch = deviceMismatchOf(error!)!;
+      expect(mismatch.missingDevices, [const DeviceRef(userId: 'u2', deviceId: 'd2')]);
+      expect(mismatch.staleDevices, isEmpty);
+      expect(deviceMismatchOf(const ApiError.network()), isNull);
+    });
+
+    test('envelopes are listed, and acked in batches of 500', () async {
+      final adapter = FakeAdapter((o) async {
+        if (o.method == 'GET') {
+          return json(200, [
+            {
+              'id': 'e1',
+              'conversationId': 'c1',
+              'senderUserId': 'u2',
+              'senderDeviceId': 'd2',
+              'type': 'whisper',
+              'ciphertext': 'AA==',
+              'serverTimestamp': '2026-11-19T10:00:00.000Z',
+            },
+          ]);
+        }
+        return ResponseBody.fromString('', 204);
+      });
+      final api = client(adapter);
+
+      final list = await api.listEnvelopes(limit: 50);
+      expect(list.single.type, EnvelopeType.whisper);
+      expect(adapter.requests.single.queryParameters, {'limit': 50});
+
+      await api.ackEnvelopes([for (var i = 0; i < 501; i++) 'e$i']);
+      final acks = adapter.requests.skip(1).toList();
+      expect(acks.map((r) => ((r.data as Map)['ids'] as List).length), [500, 1]);
+      expect(acks.first.path, '/envelopes/ack');
+    });
+
+    test('createConversation sends a direct body and parses the conversation', () async {
+      final adapter = FakeAdapter((o) async => json(201, {
+            'id': 'c1',
+            'type': 'direct',
+            'createdAt': '2026-11-19T10:00:00.000Z',
+            'members': [
+              {'userId': 'u1', 'role': 'member', 'joinedAt': '2026-11-19T10:00:00.000Z'},
+              {'userId': 'u2', 'role': 'member', 'joinedAt': '2026-11-19T10:00:00.000Z'},
+            ],
+          }));
+      final c =
+          await client(adapter).createConversation(const CreateConversationBody.direct('u2'));
+
+      expect(adapter.requests.single.data, {'type': 'direct', 'peerId': 'u2'});
+      expect(c.members.map((m) => m.userId), ['u1', 'u2']);
+    });
+  });
 }

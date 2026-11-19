@@ -24,19 +24,25 @@ void main() {
   late ProviderContainer container;
   late FakeSocketService socket;
   late FakeKeyManager keys;
+  late FakeMessagingService messaging;
   late MemorySecureStore store;
   late int fileDeletes;
 
   setUp(() {
     socket = FakeSocketService();
     keys = FakeKeyManager();
+    messaging = FakeMessagingService();
     store = MemorySecureStore('refresh')..dbKey = 'ab' * 32;
     fileDeletes = 0;
     container = ProviderContainer(overrides: [
       apiClientProvider.overrideWithValue(MockApiClient()),
       socketServiceProvider.overrideWithValue(socket),
       secureStoreProvider.overrideWithValue(store),
-      ...localDataOverrides(keys: keys, onDeleteFiles: () => fileDeletes++),
+      ...localDataOverrides(
+        keys: keys,
+        messaging: messaging,
+        onDeleteFiles: () => fileDeletes++,
+      ),
     ]);
     container.listen(sessionLifecycleProvider, (_, _) {});
   });
@@ -100,5 +106,16 @@ void main() {
 
     expect(fileDeletes, 1);
     expect(keys.ensures, 2);
+  });
+
+  test('messaging starts with the session and stops when it ends', () async {
+    final session = container.read(sessionProvider.notifier);
+    session.setSession(accessToken: 'a', me: _me, deviceId: 'd1');
+    await settle();
+    expect(messaging.starts, 1);
+
+    session.clear();
+    await settle();
+    expect(messaging.stops, 1);
   });
 }

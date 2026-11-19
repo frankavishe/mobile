@@ -4,8 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../router.dart';
+import '../chat/chat_list.dart';
 
-/// Signed-in home: Chats, Updates and Calls tabs (content arrives in later features).
+/// Signed-in home: Chats, Updates and Calls tabs (Updates and Calls arrive in later features).
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -35,26 +36,7 @@ const _tabs = [
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _index = 0;
 
-  @override
-  Widget build(BuildContext context) {
-    final tab = _tabs[_index];
-    final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Chat App'),
-        actions: [
-          PopupMenuButton<String>(
-            key: const Key('home-menu'),
-            onSelected: (v) {
-              if (v == 'settings') context.push(Routes.settings);
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'settings', child: Text('Settings')),
-            ],
-          ),
-        ],
-      ),
-      body: Center(
+  Widget _emptyState(_Tab tab, ThemeData theme) => Center(
         key: ValueKey(tab.label),
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -74,7 +56,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ],
           ),
         ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final tab = _tabs[_index];
+    final theme = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Chat App'),
+        actions: [
+          PopupMenuButton<String>(
+            key: const Key('home-menu'),
+            onSelected: (v) {
+              if (v == 'settings') context.push(Routes.settings);
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'settings', child: Text('Settings')),
+            ],
+          ),
+        ],
       ),
+      body: _index == 0
+          ? ChatList(empty: _emptyState(tab, theme))
+          : _emptyState(tab, theme),
       floatingActionButton: _index == 0
           ? FloatingActionButton(
               key: const Key('new-chat'),
