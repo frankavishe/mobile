@@ -4,6 +4,9 @@ library;
 
 export 'api_error.dart';
 export 'auth.dart';
+export 'conversation.dart';
 export 'device.dart';
+export 'envelope.dart';
 export 'events.dart';
+export 'keys.dart';
 export 'user.dart';

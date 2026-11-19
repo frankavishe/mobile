@@ -130,9 +130,159 @@ void main() {
         ApiErrorCode.unknown);
   });
 
+  group('feature 002 models', () {
+    const u1 = '0192f8a0-0000-7000-8000-000000000001';
+    const u2 = '0192f8a0-0000-7000-8000-000000000002';
+    final key = 'B${'A' * 43}';
+    final sig = '${'A' * 86}==';
+    final signed = {'keyId': 1, 'publicKey': key, 'signature': sig};
+
+    Set<String> enumOf(String name) => (schema(name)['enum'] as List).cast<String>().toSet();
+
+    test('enums match the contract', () {
+      expect(ConversationType.values.map((t) => t.toJson()).toSet(),
+          enumOf('ConversationType'));
+      expect(MemberRole.values.map((t) => t.toJson()).toSet(), enumOf('MemberRole'));
+      expect(EnvelopeType.values.map((t) => t.toJson()).toSet(), enumOf('EnvelopeType'));
+    });
+
+    test('key models write every required field', () {
+      expect(SignedPreKey.fromJson(signed).toJson().keys,
+          containsAll(requiredOf('SignedPreKey')));
+      expect(PublicPreKey.fromJson({'keyId': 2, 'publicKey': key}).toJson().keys,
+          containsAll(requiredOf('PublicPreKey')));
+      final bundle = {
+        'deviceId': u1,
+        'registrationId': 42,
+        'identityKey': key,
+        'signedPreKey': signed,
+        'preKey': null,
+      };
+      final b = DeviceBundle.fromJson(bundle);
+      expect(b.preKey, isNull);
+      expect(b.toJson().keys, containsAll(requiredOf('DeviceBundle')));
+      final keys = UserKeys.fromJson({'userId': u2, 'devices': [bundle]});
+      expect(keys.devices.single.registrationId, 42);
+      expect(keys.toJson().keys, containsAll(requiredOf('UserKeys')));
+    });
+
+    test('UploadKeysBody writes required fields and omits signedPreKey when absent', () {
+      final body = UploadKeysBody(
+        registrationId: 7,
+        identityKey: key,
+        preKeys: [PublicPreKey(keyId: 1, publicKey: key)],
+      ).toJson();
+      expect(body.keys, containsAll(requiredOf('UploadKeysBody')));
+      expect(body.containsKey('signedPreKey'), isFalse);
+      final props = (schema('UploadKeysBody')['properties'] as Map).keys;
+      expect(props, containsAll(body.keys));
+    });
+
+    test('Conversation round-trips', () {
+      final json = {
+        'id': u1,
+        'type': 'group',
+        'createdAt': '2026-11-19T10:00:00.000Z',
+        'members': [
+          {'userId': u2, 'role': 'admin', 'joinedAt': '2026-11-19T10:00:00.000Z'},
+        ],
+      };
+      final c = Conversation.fromJson(json);
+      expect(c.members.single.role, MemberRole.admin);
+      expect(c.toJson(), json);
+      expect(c.toJson().keys, containsAll(requiredOf('Conversation')));
+      expect(c.members.single.toJson().keys,
+          containsAll(requiredOf('ConversationMember')));
+    });
+
+    test('CreateConversationBody variants match the contract', () {
+      final direct = const CreateConversationBody.direct(u2).toJson();
+      final group = const CreateConversationBody.group([u1, u2]).toJson();
+      expect(direct.keys.toSet(), requiredOf('CreateDirectConversationBody'));
+      expect(group.keys.toSet(), requiredOf('CreateGroupConversationBody'));
+    });
+
+    test('send and receive models write every required field', () {
+      final body = SendMessageBody(conversationId: u1, envelopes: [
+        OutgoingEnvelope(deviceId: u2, type: EnvelopeType.prekey, ciphertext: 'AAAA'),
+      ]).toJson();
+      expect(body.keys, containsAll(requiredOf('SendMessageBody')));
+      expect((body['envelopes'] as List).single.keys,
+          containsAll(requiredOf('OutgoingEnvelope')));
+
+      final env = Envelope.fromJson({
+        'id': u1,
+        'conversationId': u2,
+        'senderUserId': u1,
+        'senderDeviceId': u2,
+        'type': 'whisper',
+        'ciphertext': 'AAAA',
+        'serverTimestamp': '2026-11-19T10:00:00.000Z',
+      });
+      expect(env.type, EnvelopeType.whisper);
+      expect(env.toJson().keys, containsAll(requiredOf('Envelope')));
+    });
+
+    test('DeviceMismatch decodes from a 409 error body', () {
+      final err = ApiError.fromJson(409, {
+        'code': 'DEVICE_MISMATCH',
+        'message': 'Device list changed',
+        'details': {
+          'missingDevices': [
+            {'userId': u1, 'deviceId': u2},
+          ],
+          'staleDevices': <dynamic>[],
+        },
+      });
+      expect(err.code, ApiErrorCode.deviceMismatch);
+      final m = DeviceMismatch.fromJson(err.details!);
+      expect(m.missingDevices.single, const DeviceRef(userId: u1, deviceId: u2));
+      expect(m.toJson().keys, containsAll(requiredOf('DeviceMismatch')));
+    });
+  });
+
   group('realtime events', () {
     Map<String, dynamic> event(String name) =>
         ws[r'$defs']['server-to-client']['properties'][name] as Map<String, dynamic>;
+    Map<String, dynamic> wsDef(String name) =>
+        ws[r'$defs'][name] as Map<String, dynamic>;
+
+    test('envelope:new matches Envelope in both contracts', () {
+      final wsRequired = (wsDef('envelope')['required'] as List).cast<String>().toSet();
+      expect(wsRequired, requiredOf('Envelope'));
+      expect(event('envelope:new')[r'$ref'], r'#/$defs/envelope');
+    });
+
+    test('conversation:updated decodes both shapes', () {
+      final full = ConversationUpdatedEvent.fromJson({
+        'id': 'c1',
+        'type': 'direct',
+        'createdAt': '2026-11-19T10:00:00.000Z',
+        'members': <dynamic>[],
+      });
+      expect(full.removed, isFalse);
+      expect(full.conversation!.type, ConversationType.direct);
+      final removed = ConversationUpdatedEvent.fromJson({'id': 'c1', 'removed': true});
+      expect(removed.removed, isTrue);
+      expect(removed.conversation, isNull);
+    });
+
+    test('typing states match in both directions', () {
+      final inbound = (event('typing')['properties']['state']['enum'] as List).toSet();
+      final outbound = (ws[r'$defs']['client-to-server']['properties']['typing']
+              ['properties']['state']['enum'] as List)
+          .toSet();
+      expect(TypingState.values.map((s) => s.toJson()).toSet(), inbound);
+      expect(outbound, inbound);
+      final e = TypingEvent.fromJson(
+          {'conversationId': 'c1', 'userId': 'u1', 'state': 'start'});
+      expect(e.state, TypingState.start);
+    });
+
+    test('prekeys:low decodes', () {
+      expect(event('prekeys:low')['required'], ['count']);
+      expect(PrekeysLowEvent.fromJson({'count': 3}).count, 3);
+    });
 
     test('device:revoked reasons match', () {
       final reasons =

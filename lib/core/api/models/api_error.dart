@@ -13,6 +13,13 @@ enum ApiErrorCode {
   rateLimited('RATE_LIMITED'),
   fileTooLarge('FILE_TOO_LARGE'),
   unsupportedMediaType('UNSUPPORTED_MEDIA_TYPE'),
+  conversationNotFound('CONVERSATION_NOT_FOUND'),
+  notAMember('NOT_A_MEMBER'),
+  forbidden('FORBIDDEN'),
+  deviceMismatch('DEVICE_MISMATCH'),
+  keysNotUploaded('KEYS_NOT_UPLOADED'),
+  groupTooLarge('GROUP_TOO_LARGE'),
+  payloadTooLarge('PAYLOAD_TOO_LARGE'),
   internal('INTERNAL'),
 
   /// Client only: the server could not be reached.

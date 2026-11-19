@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'conversation.dart';
+
 /// Why a device was signed out (`device:revoked.reason`).
 enum DeviceRevokedReason {
   signedOut('signed_out'),
@@ -56,4 +58,69 @@ class ProfileUpdatedEvent {
         avatarUrl: json['avatarUrl'] as String?,
         avatarThumbUrl: json['avatarThumbUrl'] as String?,
       );
+}
+
+/// Server event `conversation:updated`: a conversation was created or its
+/// members changed. [removed] is true when the current user was removed, in
+/// which case [conversation] is null.
+@immutable
+class ConversationUpdatedEvent {
+  const ConversationUpdatedEvent({
+    required this.id,
+    this.conversation,
+    this.removed = false,
+  });
+
+  final String id;
+  final Conversation? conversation;
+  final bool removed;
+
+  factory ConversationUpdatedEvent.fromJson(Map<String, dynamic> json) =>
+      json['removed'] == true
+          ? ConversationUpdatedEvent(id: json['id'] as String, removed: true)
+          : ConversationUpdatedEvent(
+              id: json['id'] as String,
+              conversation: Conversation.fromJson(json),
+            );
+}
+
+/// `typing.state`, in both directions.
+enum TypingState {
+  start,
+  stop;
+
+  static TypingState fromJson(String value) => TypingState.values.byName(value);
+
+  String toJson() => name;
+}
+
+/// Server event `typing`: another member started or stopped typing.
+@immutable
+class TypingEvent {
+  const TypingEvent({
+    required this.conversationId,
+    required this.userId,
+    required this.state,
+  });
+
+  final String conversationId;
+  final String userId;
+  final TypingState state;
+
+  factory TypingEvent.fromJson(Map<String, dynamic> json) => TypingEvent(
+        conversationId: json['conversationId'] as String,
+        userId: json['userId'] as String,
+        state: TypingState.fromJson(json['state'] as String),
+      );
+}
+
+/// Server event `prekeys:low`: upload more one-time prekeys.
+@immutable
+class PrekeysLowEvent {
+  const PrekeysLowEvent({required this.count});
+
+  final int count;
+
+  factory PrekeysLowEvent.fromJson(Map<String, dynamic> json) =>
+      PrekeysLowEvent(count: json['count'] as int);
 }
