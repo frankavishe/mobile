@@ -3,23 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:phone_numbers_parser/phone_numbers_parser.dart';
 
 import '../../core/api/error_messages.dart';
 import '../../core/api/models/models.dart';
+import '../../core/phone.dart';
 import 'auth_controller.dart';
 
 const codeLength = 6;
-
-/// `+255 712 345 678` for display.
-String formatPhone(String e164) {
-  try {
-    final n = PhoneNumber.parse(e164);
-    return '+${n.countryCode} ${n.formatNsn()}';
-  } catch (_) {
-    return e164;
-  }
-}
 
 /// `0:42` for a countdown.
 String formatCountdown(int seconds) =>

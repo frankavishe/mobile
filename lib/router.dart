@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'core/auth/session.dart';
 import 'features/auth/code_screen.dart';
 import 'features/auth/phone_screen.dart';
+import 'features/contacts/new_chat_screen.dart';
 import 'features/devices/linked_devices_screen.dart';
 import 'features/home/home_screen.dart';
 import 'features/profile/profile_edit_screen.dart';
@@ -18,6 +19,7 @@ abstract final class Routes {
   static const signInCode = '/sign-in/code';
   static const profileSetup = '/profile-setup';
   static const home = '/';
+  static const newChat = '/new-chat';
   static const settings = '/settings';
   static const settingsProfile = '/settings/profile';
   static const settingsDevices = '/settings/devices';
@@ -68,6 +70,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, _) => const ProfileSetupScreen(),
       ),
       GoRoute(path: Routes.home, builder: (_, _) => const HomeScreen()),
+      GoRoute(path: Routes.newChat, builder: (_, _) => const NewChatScreen()),
       GoRoute(
         path: Routes.settings,
         builder: (_, _) => const SettingsScreen(),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/theme.dart';
 import 'features/auth/auth_controller.dart';
+import 'features/contacts/contacts_repository.dart';
 import 'router.dart';
 
 class ChatApp extends ConsumerWidget {
@@ -12,6 +13,8 @@ class ChatApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Connects the socket while signed in and handles remote sign-out.
     ref.watch(sessionLifecycleProvider);
+    // Checks the address book for contacts on the app when it opens (at most hourly).
+    ref.watch(contactsAutoSyncProvider);
     return MaterialApp.router(
       title: 'Chat App',
       debugShowCheckedModeBanner: false,

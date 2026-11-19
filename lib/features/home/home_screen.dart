@@ -75,6 +75,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ),
       ),
+      floatingActionButton: _index == 0
+          ? FloatingActionButton(
+              key: const Key('new-chat'),
+              tooltip: 'New chat',
+              onPressed: () => context.push(Routes.newChat),
+              child: const Icon(Icons.add_comment_outlined),
+            )
+          : null,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),

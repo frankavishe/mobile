@@ -6,36 +6,10 @@ import 'package:phone_numbers_parser/phone_numbers_parser.dart';
 
 import '../../core/api/error_messages.dart';
 import '../../core/auth/session.dart';
+import '../../core/phone.dart';
+import '../../core/widgets/country_picker.dart';
 import '../../router.dart';
 import 'auth_controller.dart';
-
-const _fallbackCountry = IsoCode.TZ;
-
-/// Country from the device locale (e.g. `sw_TZ`), else Tanzania (same rule as the web app).
-IsoCode defaultCountry([String? region]) {
-  final code = (region ?? WidgetsBinding.instance.platformDispatcher.locale.countryCode)?.toUpperCase();
-  return IsoCode.values.asNameMap()[code] ?? _fallbackCountry;
-}
-
-/// `+255` for [IsoCode.TZ].
-String dialCode(IsoCode iso) => '+${PhoneNumber(isoCode: iso, nsn: '').countryCode}';
-
-/// Regional indicator flag, e.g. 🇹🇿.
-String flagOf(IsoCode iso) => String.fromCharCodes(
-      iso.name.codeUnits.map((c) => 0x1F1E6 + c - 0x41),
-    );
-
-/// The E.164 form of [national] in [country], or null when it is not a valid number.
-String? toE164(IsoCode country, String national) {
-  final digits = national.replaceAll(RegExp(r'\D'), '');
-  if (digits.isEmpty) return null;
-  try {
-    final n = PhoneNumber.parse(digits, destinationCountry: country);
-    return n.isoCode == country && n.isValid() ? n.international : null;
-  } catch (_) {
-    return null;
-  }
-}
 
 String signOutReasonText(SignOutReason reason) => switch (reason) {
       SignOutReason.signedOut =>
@@ -95,12 +69,7 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
   }
 
   Future<void> _pickCountry() async {
-    final picked = await showModalBottomSheet<IsoCode>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => const _CountrySheet(),
-    );
+    final picked = await showCountryPicker(context);
     if (picked != null) setState(() => _country = picked);
   }
 
@@ -196,63 +165,6 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _CountrySheet extends StatefulWidget {
-  const _CountrySheet();
-
-  @override
-  State<_CountrySheet> createState() => _CountrySheetState();
-}
-
-class _CountrySheetState extends State<_CountrySheet> {
-  static final _all = [
-    for (final iso in IsoCode.values) (iso: iso, dial: dialCode(iso)),
-  ]..sort((a, b) => a.iso.name.compareTo(b.iso.name));
-
-  String _query = '';
-
-  @override
-  Widget build(BuildContext context) {
-    final q = _query.trim().toUpperCase().replaceAll('+', '');
-    final items = q.isEmpty
-        ? _all
-        : _all
-            .where((c) => c.iso.name.contains(q) || c.dial.substring(1).startsWith(q))
-            .toList();
-    return SizedBox(
-      height: MediaQuery.sizeOf(context).height * 0.75,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: TextField(
-              autofocus: true,
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                hintText: 'Country code (TZ) or dial code (255)',
-              ),
-              onChanged: (v) => setState(() => _query = v),
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: items.length,
-              itemBuilder: (_, i) {
-                final c = items[i];
-                return ListTile(
-                  leading: Text(flagOf(c.iso), style: const TextStyle(fontSize: 24)),
-                  title: Text(c.iso.name),
-                  trailing: Text(c.dial),
-                  onTap: () => Navigator.pop(context, c.iso),
-                );
-              },
-            ),
-          ),
-        ],
       ),
     );
   }
