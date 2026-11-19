@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../auth/auth_controller.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../router.dart';
 
 /// Signed-in home: Chats, Updates and Calls tabs (content arrives in later features).
 class HomeScreen extends ConsumerStatefulWidget {
@@ -44,11 +46,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           PopupMenuButton<String>(
             key: const Key('home-menu'),
             onSelected: (v) {
-              if (v == 'sign-out') ref.read(authControllerProvider.notifier).signOut();
+              if (v == 'settings') context.push(Routes.settings);
             },
             itemBuilder: (_) => const [
-              // Temporary until Settings arrives with profile and linked devices.
-              PopupMenuItem(value: 'sign-out', child: Text('Sign out')),
+              PopupMenuItem(value: 'settings', child: Text('Settings')),
             ],
           ),
         ],

@@ -244,14 +244,16 @@ void main() {
       expect(socket.disconnects, greaterThan(0));
     });
 
-    testWidgets('sign out from home returns to sign-in without a banner', (tester) async {
+    testWidgets('sign out from settings returns to sign-in without a banner', (tester) async {
       await boot(tester);
       container.read(sessionProvider.notifier).setSession(accessToken: 'a', me: _me);
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('home-menu')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Sign out'));
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('settings-sign-out')));
       await tester.pumpAndSettle();
 
       verify(() => api.signOut()).called(1);

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -6,6 +6,9 @@ import 'core/auth/session.dart';
 import 'features/auth/code_screen.dart';
 import 'features/auth/phone_screen.dart';
 import 'features/home/home_screen.dart';
+import 'features/profile/profile_edit_screen.dart';
+import 'features/profile/profile_setup_screen.dart';
+import 'features/settings/settings_screen.dart';
 import 'features/splash/splash_screen.dart';
 
 abstract final class Routes {
@@ -14,6 +17,8 @@ abstract final class Routes {
   static const signInCode = '/sign-in/code';
   static const profileSetup = '/profile-setup';
   static const home = '/';
+  static const settings = '/settings';
+  static const settingsProfile = '/settings/profile';
 }
 
 /// Where the session state says the user must be, or null to stay on [location].
@@ -56,26 +61,21 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: 'code', builder: (_, _) => const CodeScreen()),
         ],
       ),
-      // Placeholder until profile setup (T047).
       GoRoute(
         path: Routes.profileSetup,
-        builder: (_, _) => const _Placeholder('Profile setup'),
+        builder: (_, _) => const ProfileSetupScreen(),
       ),
       GoRoute(path: Routes.home, builder: (_, _) => const HomeScreen()),
+      GoRoute(
+        path: Routes.settings,
+        builder: (_, _) => const SettingsScreen(),
+        routes: [
+          GoRoute(path: 'profile', builder: (_, _) => const ProfileEditScreen()),
+        ],
+      ),
     ],
   );
   ref.onDispose(router.dispose);
   return router;
 });
 
-class _Placeholder extends StatelessWidget {
-  const _Placeholder(this.title);
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: Text(title)),
-        body: const Center(child: Text('Coming soon')),
-      );
-}
