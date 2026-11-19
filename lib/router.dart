@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'core/auth/session.dart';
 import 'features/auth/code_screen.dart';
 import 'features/auth/phone_screen.dart';
+import 'features/devices/linked_devices_screen.dart';
 import 'features/home/home_screen.dart';
 import 'features/profile/profile_edit_screen.dart';
 import 'features/profile/profile_setup_screen.dart';
@@ -19,6 +20,7 @@ abstract final class Routes {
   static const home = '/';
   static const settings = '/settings';
   static const settingsProfile = '/settings/profile';
+  static const settingsDevices = '/settings/devices';
 }
 
 /// Where the session state says the user must be, or null to stay on [location].
@@ -71,6 +73,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, _) => const SettingsScreen(),
         routes: [
           GoRoute(path: 'profile', builder: (_, _) => const ProfileEditScreen()),
+          GoRoute(path: 'devices', builder: (_, _) => const LinkedDevicesScreen()),
         ],
       ),
     ],

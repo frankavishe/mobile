@@ -36,12 +36,12 @@ class SettingsScreen extends ConsumerWidget {
             onTap: () => context.push(Routes.settingsProfile),
           ),
           const Divider(),
-          const ListTile(
-            key: Key('settings-devices'),
-            leading: Icon(Icons.devices_outlined),
-            title: Text('Linked devices'),
-            subtitle: Text('Coming soon'),
-            enabled: false,
+          ListTile(
+            key: const Key('settings-devices'),
+            leading: const Icon(Icons.devices_outlined),
+            title: const Text('Linked devices'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push(Routes.settingsDevices),
           ),
           ListTile(
             key: const Key('settings-sign-out'),
