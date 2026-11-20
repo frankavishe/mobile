@@ -42,8 +42,8 @@ class ApiClient {
   }) {
     final options = BaseOptions(
       baseUrl: baseUrl ?? AppConfig.apiBaseUrl,
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 20),
+      connectTimeout: const Duration(seconds: 60),
+      receiveTimeout: const Duration(seconds: 60),
       contentType: Headers.jsonContentType,
     );
     // Refresh calls go through a separate instance so they never hit the retry interceptor.

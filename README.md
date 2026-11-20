@@ -24,6 +24,16 @@ allow plain HTTP (`android/app/src/debug/AndroidManifest.xml`); release builds d
 
 One-time codes are printed in the API log (`OTP for +255…: 123456`).
 
+## Build for a real device (Render)
+
+```bash
+flutter build apk --release --dart-define=API_URL=https://chat-api-3snf.onrender.com
+```
+
+Without `--dart-define` the APK points at `10.0.2.2`, which a phone can't reach, and the app shows
+"Can't reach the server". The free Render service sleeps when idle and needs ~40s to wake up; the
+API client's 60s timeouts cover that.
+
 ## Tests
 
 ```bash
