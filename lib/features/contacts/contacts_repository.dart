@@ -109,6 +109,11 @@ const discoverBatchSize = 1000;
 /// FR-013: the address book is checked again at most this often (unless the user asks).
 const contactsSyncInterval = Duration(hours: 1);
 
+/// Opening New chat re-checks the address book if the last check is older than this, so
+/// people who joined since then show up. The server allows 10 discover calls per device per
+/// hour (one per [discoverBatchSize] numbers), which this stays under for normal address books.
+const newChatSyncInterval = Duration(minutes: 2);
+
 @immutable
 class ContactsState {
   const ContactsState({
@@ -185,14 +190,14 @@ class ContactsRepository extends Notifier<ContactsState> {
   }
 
   /// Checks the address book against the server. Without [force] this runs at most once per
-  /// [contactsSyncInterval]. Never asks for permission.
-  Future<void> sync({bool force = false}) async {
+  /// [maxAge] (default [contactsSyncInterval]). Never asks for permission.
+  Future<void> sync({bool force = false, Duration maxAge = contactsSyncInterval}) async {
     if (state.syncing) return;
     final access = await checkAccess();
     if (access != ContactsAccess.granted) return;
     if (!force) {
       final last = await _store.readContactsSyncedAt();
-      if (last != null && DateTime.now().difference(last) < contactsSyncInterval) return;
+      if (last != null && DateTime.now().difference(last) < maxAge) return;
     }
 
     state = state.copyWith(syncing: true, error: () => null);

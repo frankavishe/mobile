@@ -47,12 +47,12 @@ void main() {
     when(() => api.discoverContacts(any())).thenAnswer((_) async => [_amina]);
   });
 
-  Future<void> open(WidgetTester tester) async {
+  Future<void> open(WidgetTester tester, {MemorySecureStore? store}) async {
     container = ProviderContainer(overrides: [
       apiClientProvider.overrideWithValue(api),
       socketServiceProvider.overrideWithValue(FakeSocketService()),
       ...localDataOverrides(messaging: messaging),
-      secureStoreProvider.overrideWithValue(MemorySecureStore()),
+      secureStoreProvider.overrideWithValue(store ?? MemorySecureStore()),
       addressBookProvider.overrideWithValue(book),
     ]);
     addTearDown(container.dispose);
@@ -183,5 +183,19 @@ void main() {
 
     expect(book.reads, 1);
     verify(() => api.discoverContacts(['+255713456789'])).called(1);
+  });
+
+  testWidgets('opening New chat finds contacts who joined since the last check',
+      (tester) async {
+    book.current = ContactsAccess.granted;
+    // Checked 5 minutes ago: the hourly app-open check skips, New chat does not.
+    final store = MemorySecureStore()
+      ..contactsSyncedAt = DateTime.now().subtract(const Duration(minutes: 5));
+    when(() => api.listContacts()).thenAnswer((_) async => [_amina]);
+    await open(tester, store: store);
+
+    expect(book.reads, 1);
+    verify(() => api.discoverContacts(['+255713456789'])).called(1);
+    expect(find.text('Amina'), findsOneWidget);
   });
 }

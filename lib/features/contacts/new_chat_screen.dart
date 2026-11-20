@@ -71,8 +71,9 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
     _lifecycle = AppLifecycleListener(onResume: _contacts.checkAccess);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _contacts.checkAccess();
       _contacts.load();
+      // Picks up contacts who joined since the last check (sync also re-reads access).
+      _contacts.sync(maxAge: newChatSyncInterval);
     });
   }
 

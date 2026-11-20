@@ -133,6 +133,20 @@ void main() {
       expect(book.reads, 3);
     });
 
+    test('maxAge shortens the limit (New chat re-checks after 2 minutes)', () async {
+      store.contactsSyncedAt = DateTime.now().subtract(const Duration(minutes: 1));
+      await repo().sync(maxAge: newChatSyncInterval);
+      expect(book.reads, 0, reason: 'checked a minute ago');
+
+      store.contactsSyncedAt = DateTime.now().subtract(const Duration(minutes: 3));
+      await repo().sync(maxAge: newChatSyncInterval);
+      expect(book.reads, 1);
+
+      store.contactsSyncedAt = DateTime.now().subtract(const Duration(minutes: 3));
+      await repo().sync();
+      expect(book.reads, 1, reason: 'the default stays hourly');
+    });
+
     test('large address books go out in batches of 1,000', () async {
       book.numbers = [
         for (var i = 0; i < 2300; i++) '+25571${i.toString().padLeft(7, '0')}',
