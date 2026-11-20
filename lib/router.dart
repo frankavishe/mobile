@@ -6,6 +6,8 @@ import 'core/auth/session.dart';
 import 'features/auth/code_screen.dart';
 import 'features/auth/phone_screen.dart';
 import 'features/chat/conversation_screen.dart';
+import 'features/chat/group_info_screen.dart';
+import 'features/chat/new_group_screen.dart';
 import 'features/contacts/new_chat_screen.dart';
 import 'features/devices/linked_devices_screen.dart';
 import 'features/home/home_screen.dart';
@@ -23,6 +25,9 @@ abstract final class Routes {
   static const newChat = '/new-chat';
   static const chat = '/chat/:id';
   static String chatOf(String conversationId) => '/chat/$conversationId';
+  static const newGroup = '/new-group';
+  static String groupInfoOf(String conversationId) => '/chat/$conversationId/info';
+  static String groupAddOf(String conversationId) => '/chat/$conversationId/add';
   static const settings = '/settings';
   static const settingsProfile = '/settings/profile';
   static const settingsDevices = '/settings/devices';
@@ -74,10 +79,23 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: Routes.home, builder: (_, _) => const HomeScreen()),
       GoRoute(path: Routes.newChat, builder: (_, _) => const NewChatScreen()),
+      GoRoute(path: Routes.newGroup, builder: (_, _) => const NewGroupScreen()),
       GoRoute(
         path: Routes.chat,
         builder: (_, state) =>
             ConversationScreen(conversationId: state.pathParameters['id']!),
+        routes: [
+          GoRoute(
+            path: 'info',
+            builder: (_, state) =>
+                GroupInfoScreen(conversationId: state.pathParameters['id']!),
+          ),
+          GoRoute(
+            path: 'add',
+            builder: (_, state) =>
+                AddMembersScreen(conversationId: state.pathParameters['id']!),
+          ),
+        ],
       ),
       GoRoute(
         path: Routes.settings,

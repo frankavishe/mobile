@@ -14,6 +14,44 @@ String chatTitle(LocalConversation c, CachedUser? peer) {
   return c.kind == ConversationKind.group ? 'Group' : 'Unknown';
 }
 
+/// A user's name for lists and notes: the display name, else the number, else "Unknown".
+String userLabel(CachedUser? u) {
+  final name = u?.displayName;
+  if (name != null && name.isNotEmpty) return name;
+  final phone = u?.phone;
+  if (phone != null && phone.isNotEmpty) return formatPhone(phone);
+  return 'Unknown';
+}
+
+/// Longest group name accepted by the app (it travels encrypted; the server never checks).
+const groupNameMax = 50;
+
+/// A stable color per user for sender names in group bubbles.
+Color senderColor(String userId, ColorScheme scheme) {
+  const hues = [8.0, 32.0, 140.0, 175.0, 205.0, 230.0, 275.0, 310.0, 340.0];
+  final hue = hues[userId.codeUnits.fold<int>(0, (a, b) => (a * 31 + b) & 0x7fffffff) % hues.length];
+  final dark = scheme.brightness == Brightness.dark;
+  return HSLColor.fromAHSL(1, hue, 0.6, dark ? 0.72 : 0.38).toColor();
+}
+
+/// The round icon used for groups (groups have no picture).
+class GroupAvatar extends StatelessWidget {
+  const GroupAvatar({super.key, this.radius = 24});
+
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: scheme.secondaryContainer,
+      foregroundColor: scheme.onSecondaryContainer,
+      child: Icon(Icons.group, size: radius),
+    );
+  }
+}
+
 String _two(int n) => n.toString().padLeft(2, '0');
 
 String clockTime(DateTime t) {

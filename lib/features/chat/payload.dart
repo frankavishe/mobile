@@ -2,10 +2,11 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
-/// `kind` of a plaintext payload. `group_update` arrives with groups (Phase 5).
+/// `kind` of a plaintext payload.
 enum PayloadKind {
   text('text'),
-  receipt('receipt');
+  receipt('receipt'),
+  groupUpdate('group_update');
 
   const PayloadKind(this.wire);
 
@@ -32,7 +33,8 @@ enum ReceiptType {
 }
 
 /// What travels inside every ciphertext (see phase.md, "Plaintext payload"):
-/// `{v:1, kind, messageId, conversationId, sentAt, body?, receipt?: {type, messageIds}}`.
+/// `{v:1, kind, messageId, conversationId, sentAt, body?, receipt?: {type, messageIds},
+/// group?: {name, memberIds}}`.
 @immutable
 class Payload {
   const Payload({
@@ -43,6 +45,8 @@ class Payload {
     this.body,
     this.receiptType,
     this.receiptIds = const [],
+    this.groupName,
+    this.groupMemberIds = const [],
   });
 
   const Payload.text({
@@ -52,7 +56,9 @@ class Payload {
     required String this.body,
   })  : kind = PayloadKind.text,
         receiptType = null,
-        receiptIds = const [];
+        receiptIds = const [],
+        groupName = null,
+        groupMemberIds = const [];
 
   const Payload.receipt({
     required this.messageId,
@@ -61,7 +67,22 @@ class Payload {
     required ReceiptType this.receiptType,
     required this.receiptIds,
   })  : kind = PayloadKind.receipt,
-        body = null;
+        body = null,
+        groupName = null,
+        groupMemberIds = const [];
+
+  /// Group metadata the server never sees: the name, and the member list as the sender
+  /// knew it.
+  const Payload.groupUpdate({
+    required this.messageId,
+    required this.conversationId,
+    required this.sentAt,
+    required String this.groupName,
+    required this.groupMemberIds,
+  })  : kind = PayloadKind.groupUpdate,
+        body = null,
+        receiptType = null,
+        receiptIds = const [];
 
   static const version = 1;
 
@@ -72,6 +93,8 @@ class Payload {
   final String? body;
   final ReceiptType? receiptType;
   final List<String> receiptIds;
+  final String? groupName;
+  final List<String> groupMemberIds;
 
   Map<String, dynamic> toJson() => {
         'v': version,
@@ -82,6 +105,7 @@ class Payload {
         'body': ?body,
         if (receiptType != null)
           'receipt': {'type': receiptType!.name, 'messageIds': receiptIds},
+        if (groupName != null) 'group': {'name': groupName, 'memberIds': groupMemberIds},
       };
 
   String encode() => jsonEncode(toJson());
@@ -122,6 +146,18 @@ class Payload {
             sentAt: base.sentAt,
             receiptType: type,
             receiptIds: [for (final id in r['messageIds'] as List) id as String],
+          );
+        case PayloadKind.groupUpdate:
+          final g = m['group'];
+          if (g is! Map<String, dynamic>) return null;
+          final name = g['name'];
+          if (name is! String) return null;
+          return Payload.groupUpdate(
+            messageId: base.messageId,
+            conversationId: base.conversationId,
+            sentAt: base.sentAt,
+            groupName: name,
+            groupMemberIds: [for (final id in (g['memberIds'] as List? ?? const [])) id as String],
           );
       }
     } catch (_) {

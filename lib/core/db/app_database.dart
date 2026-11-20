@@ -78,6 +78,12 @@ class Conversations extends Table {
   /// Group name, learnt from encrypted `group_update` payloads.
   TextColumn get name => text().nullable()();
 
+  /// `sentAt` of the `group_update` that set [name]; older updates are ignored.
+  DateTimeColumn get nameUpdatedAt => dateTime().nullable()();
+
+  /// False once this user left or was removed: the history stays, read-only.
+  BoolColumn get active => boolean().withDefault(const Constant(true))();
+
   /// The other user of a direct chat.
   TextColumn get peerUserId => text().nullable()();
   DateTimeColumn get updatedAt => dateTime()();
@@ -115,6 +121,18 @@ class Messages extends Table {
 
   @override
   Set<Column> get primaryKey => {id};
+}
+
+/// How far each recipient got with one of this user's group messages. The message's own
+/// status is the lowest across the current members.
+class Receipts extends Table {
+  TextColumn get messageId =>
+      text().references(Messages, #id, onDelete: KeyAction.cascade)();
+  TextColumn get userId => text()();
+  TextColumn get status => textEnum<MessageStatus>()();
+
+  @override
+  Set<Column> get primaryKey => {messageId, userId};
 }
 
 /// Plaintext payloads waiting to be encrypted and sent.
@@ -157,6 +175,7 @@ class ChatSummary {
     required this.conversation,
     this.lastMessage,
     this.peer,
+    this.lastSender,
   });
 
   final LocalConversation conversation;
@@ -164,6 +183,19 @@ class ChatSummary {
 
   /// The other user of a direct chat, when known.
   final CachedUser? peer;
+
+  /// Who sent [lastMessage], when known (for "Alice: hi" in groups).
+  final CachedUser? lastSender;
+}
+
+/// A conversation member with their cached profile, when known.
+class MemberInfo {
+  const MemberInfo({required this.member, this.user});
+
+  final Member member;
+  final CachedUser? user;
+
+  bool get isAdmin => member.role == 'admin';
 }
 
 @DriftDatabase(tables: [
@@ -179,12 +211,13 @@ class ChatSummary {
   Outbox,
   KnownDevices,
   CachedUsers,
+  Receipts,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -192,6 +225,11 @@ class AppDatabase extends _$AppDatabase {
           if (from < 2) {
             await m.createTable(knownDevices);
             await m.createTable(cachedUsers);
+          }
+          if (from < 3) {
+            await m.addColumn(conversations, conversations.nameUpdatedAt);
+            await m.addColumn(conversations, conversations.active);
+            await m.createTable(receipts);
           }
         },
         beforeOpen: (details) async {
@@ -222,6 +260,47 @@ class AppDatabase extends _$AppDatabase {
 
   Future<List<Member>> membersOf(String conversationId) =>
       (select(members)..where((t) => t.conversationId.equals(conversationId))).get();
+
+  /// Members with their cached profiles; admins first, then by name.
+  Stream<List<MemberInfo>> watchMembers(String conversationId) {
+    final query = select(members).join([
+      leftOuterJoin(cachedUsers, cachedUsers.id.equalsExp(members.userId)),
+    ])
+      ..where(members.conversationId.equals(conversationId));
+    return query.watch().map((rows) {
+      final list = [
+        for (final r in rows)
+          MemberInfo(member: r.readTable(members), user: r.readTableOrNull(cachedUsers)),
+      ];
+      String key(MemberInfo m) =>
+          (m.user?.displayName ?? m.user?.phone ?? '￿').toLowerCase();
+      list.sort((a, b) {
+        if (a.isAdmin != b.isAdmin) return a.isAdmin ? -1 : 1;
+        return key(a).compareTo(key(b));
+      });
+      return list;
+    });
+  }
+
+  Future<List<LocalConversation>> allConversations() => select(conversations).get();
+
+  /// Sets the group name when [at] is newer than the time the current name was set.
+  /// Returns whether it changed.
+  Future<bool> setConversationName(String id, String name, DateTime at) =>
+      transaction(() async {
+        final c = await conversationById(id);
+        if (c == null) return false;
+        final prev = c.nameUpdatedAt;
+        if (prev != null && !at.isAfter(prev)) return false;
+        await (update(conversations)..where((t) => t.id.equals(id))).write(
+          ConversationsCompanion(name: Value(name), nameUpdatedAt: Value(at)),
+        );
+        return true;
+      });
+
+  Future<void> setActive(String id, {required bool active}) =>
+      (update(conversations)..where((t) => t.id.equals(id)))
+          .write(ConversationsCompanion(active: Value(active)));
 
   Future<void> insertMessage(MessagesCompanion m) =>
       into(messages).insert(m, mode: InsertMode.insertOrIgnore);
@@ -295,6 +374,7 @@ class AppDatabase extends _$AppDatabase {
   /// The chat list, most recent activity first.
   Stream<List<ChatSummary>> watchChatList() {
     final last = alias(messages, 'last_message');
+    final sender = alias(cachedUsers, 'last_sender');
     final latestId = subqueryExpression<String>(
       selectOnly(messages)
         ..addColumns([messages.id])
@@ -308,6 +388,7 @@ class AppDatabase extends _$AppDatabase {
     final query = select(conversations).join([
       leftOuterJoin(last, last.id.equalsExp(latestId)),
       leftOuterJoin(cachedUsers, cachedUsers.id.equalsExp(conversations.peerUserId)),
+      leftOuterJoin(sender, sender.id.equalsExp(last.senderUserId)),
     ])
       ..orderBy([
         OrderingTerm.desc(coalesce<DateTime>([last.sentAt, conversations.updatedAt])),
@@ -318,6 +399,7 @@ class AppDatabase extends _$AppDatabase {
               conversation: r.readTable(conversations),
               lastMessage: r.readTableOrNull(last),
               peer: r.readTableOrNull(cachedUsers),
+              lastSender: r.readTableOrNull(sender),
             ),
         ]);
   }
@@ -338,6 +420,65 @@ class AppDatabase extends _$AppDatabase {
   Future<void> removeDevice(String userId, String deviceId) => (delete(knownDevices)
         ..where((t) => t.userId.equals(userId) & t.deviceId.equals(deviceId)))
       .go();
+
+  // --- group receipts ---------------------------------------------------------
+
+  Future<List<Receipt>> receiptsFor(String messageId) =>
+      (select(receipts)..where((t) => t.messageId.equals(messageId))).get();
+
+  /// Records that [userId] reached [status] for one of this user's group messages (forward
+  /// only), then moves the message to the lowest status across the current members.
+  Future<void> applyReceipt(
+    String messageId,
+    String userId,
+    MessageStatus status,
+    String myUserId,
+  ) =>
+      transaction(() async {
+        final m = await messageById(messageId);
+        if (m == null) return;
+        final existing = await (select(receipts)
+              ..where((t) => t.messageId.equals(messageId) & t.userId.equals(userId)))
+            .getSingleOrNull();
+        if (existing == null || status.index > existing.status.index) {
+          await into(receipts).insertOnConflictUpdate(
+            ReceiptsCompanion.insert(messageId: messageId, userId: userId, status: status),
+          );
+        }
+        await _aggregate(m, myUserId);
+      });
+
+  /// Re-applies the aggregate to this user's sent or delivered messages in
+  /// [conversationId], e.g. after a member who held them back left.
+  Future<void> reaggregate(String conversationId, String myUserId) =>
+      transaction(() async {
+        final mine = await (select(messages)
+              ..where((t) =>
+                  t.conversationId.equals(conversationId) &
+                  t.senderUserId.equals(myUserId) &
+                  t.kind.equalsValue(MessageKind.text) &
+                  t.status.isInValues([MessageStatus.sent, MessageStatus.delivered])))
+            .get();
+        for (final m in mine) {
+          await _aggregate(m, myUserId);
+        }
+      });
+
+  Future<void> _aggregate(Message m, String myUserId) async {
+    final others = [
+      for (final mem in await membersOf(m.conversationId))
+        if (mem.userId != myUserId) mem.userId,
+    ];
+    if (others.isEmpty) return;
+    final byUser = {for (final r in await receiptsFor(m.id)) r.userId: r.status};
+    var lowest = MessageStatus.read;
+    for (final u in others) {
+      final st = byUser[u];
+      if (st == null) return; // not everyone has it yet
+      if (st.index < lowest.index) lowest = st;
+    }
+    await updateMessageStatus(m.id, lowest);
+  }
 
   Future<void> cacheUser(CachedUsersCompanion u) => into(cachedUsers).insertOnConflictUpdate(u);
 

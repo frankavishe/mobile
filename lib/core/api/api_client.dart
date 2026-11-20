@@ -257,6 +257,25 @@ class ApiClient {
         return PublicUser.fromJson(res.data!);
       });
 
+  /// Max ids per `GET /users`.
+  static const usersBatchMax = 64;
+
+  /// Public profiles for [ids]. Users the caller may not see (no shared contact or
+  /// conversation) are left out without an error.
+  Future<List<PublicUser>> getUsers(List<String> ids) => _call(() async {
+        final users = <PublicUser>[];
+        for (var i = 0; i < ids.length; i += usersBatchMax) {
+          final end = i + usersBatchMax;
+          final res = await dio.get<List<dynamic>>(
+            '/users',
+            queryParameters: {'id': ids.sublist(i, end > ids.length ? ids.length : end)},
+            options: Options(listFormat: ListFormat.multi),
+          );
+          users.addAll(_users(res.data!));
+        }
+        return users;
+      });
+
   // ---- keys ----
 
   /// `PUT /keys`. The first upload (or a new identity key) must include the signed prekey.
@@ -316,6 +335,21 @@ class ApiClient {
         final res =
             await dio.post<Map<String, dynamic>>('/conversations', data: body.toJson());
         return Conversation.fromJson(res.data!);
+      });
+
+  /// Group admins only. Returns the updated conversation.
+  Future<Conversation> addMembers(String conversationId, List<String> userIds) =>
+      _call(() async {
+        final res = await dio.post<Map<String, dynamic>>(
+          '/conversations/$conversationId/members',
+          data: AddMembersBody(userIds).toJson(),
+        );
+        return Conversation.fromJson(res.data!);
+      });
+
+  /// Admins remove anyone; any member may remove themselves (leave).
+  Future<void> removeMember(String conversationId, String userId) => _call(() async {
+        await dio.delete<void>('/conversations/$conversationId/members/$userId');
       });
 
   // ---- messages ----

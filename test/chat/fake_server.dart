@@ -64,6 +64,87 @@ class FakeServer {
 
   List<String> _members(String conversationId) =>
       conversations[conversationId]!.members.map((m) => m.userId).toList();
+
+  /// Public profiles for `GET /users`.
+  final profiles = <String, PublicUser>{};
+
+  int _joined = 0;
+
+  /// Later joins sort after earlier ones (for admin promotion).
+  DateTime _nextJoin() => DateTime.utc(2026).add(Duration(seconds: _joined++));
+
+  Conversation group(String admin, List<String> others) {
+    final c = Conversation(
+      id: _uuid.v4(),
+      type: ConversationType.group,
+      createdAt: DateTime.utc(2026, 11, 19),
+      members: [
+        ConversationMember(userId: admin, role: MemberRole.admin, joinedAt: _nextJoin()),
+        for (final u in others)
+          ConversationMember(userId: u, role: MemberRole.member, joinedAt: _nextJoin()),
+      ],
+    );
+    conversations[c.id] = c;
+    _announce(c);
+    return c;
+  }
+
+  /// `conversation:updated` to every device of every member.
+  void _announce(Conversation c) {
+    for (final m in c.members) {
+      _push(m.userId, ConversationUpdatedEvent(id: c.id, conversation: c));
+    }
+  }
+
+  void _push(String userId, ConversationUpdatedEvent e) {
+    for (final d in users[userId] ?? const <String>[]) {
+      final socket = sockets[d];
+      if (socket != null && !offline.contains(d)) socket.conversations.add(e);
+    }
+  }
+
+  static const _forbidden =
+      ApiError(status: 403, code: ApiErrorCode.forbidden, message: 'Admins only');
+
+  Conversation addMembers(String caller, String id, List<String> userIds) {
+    final c = conversations[id]!;
+    final me = c.members.firstWhere((m) => m.userId == caller);
+    if (me.role != MemberRole.admin) throw _forbidden;
+    final updated = Conversation(
+      id: c.id,
+      type: c.type,
+      createdAt: c.createdAt,
+      members: [
+        ...c.members,
+        for (final u in userIds)
+          if (!c.members.any((m) => m.userId == u))
+            ConversationMember(userId: u, role: MemberRole.member, joinedAt: _nextJoin()),
+      ],
+    );
+    conversations[id] = updated;
+    _announce(updated);
+    return updated;
+  }
+
+  void removeMember(String caller, String id, String target) {
+    final c = conversations[id]!;
+    final me = c.members.firstWhere((m) => m.userId == caller);
+    if (caller != target && me.role != MemberRole.admin) throw _forbidden;
+    var rest = c.members.where((m) => m.userId != target).toList();
+    if (rest.isNotEmpty && !rest.any((m) => m.role == MemberRole.admin)) {
+      rest.sort((a, b) => a.joinedAt.compareTo(b.joinedAt));
+      final oldest = rest.first;
+      rest = [
+        ConversationMember(userId: oldest.userId, role: MemberRole.admin, joinedAt: oldest.joinedAt),
+        ...rest.skip(1),
+      ];
+    }
+    final updated =
+        Conversation(id: c.id, type: c.type, createdAt: c.createdAt, members: rest);
+    conversations[id] = updated;
+    _announce(updated);
+    _push(target, ConversationUpdatedEvent(id: id, removed: true));
+  }
 }
 
 /// `ApiClient` for one device, backed by [FakeServer].
@@ -146,7 +227,31 @@ class FakeApi implements ApiClient {
   @override
   Future<Conversation> createConversation(CreateConversationBody body) async {
     _online();
-    return server.direct(userId, (body as CreateDirectConversation).peerId);
+    return switch (body) {
+      CreateDirectConversation(:final peerId) => server.direct(userId, peerId),
+      CreateGroupConversation(:final memberIds) => server.group(userId, memberIds),
+    };
+  }
+
+  @override
+  Future<Conversation> addMembers(String conversationId, List<String> userIds) async {
+    _online();
+    return server.addMembers(userId, conversationId, userIds);
+  }
+
+  @override
+  Future<void> removeMember(String conversationId, String userId) async {
+    _online();
+    server.removeMember(this.userId, conversationId, userId);
+  }
+
+  @override
+  Future<List<PublicUser>> getUsers(List<String> ids) async {
+    _online();
+    return [
+      for (final id in ids)
+        if (server.profiles[id] != null) server.profiles[id]!,
+    ];
   }
 
   @override
@@ -157,6 +262,13 @@ class FakeApi implements ApiClient {
         status: 404,
         code: ApiErrorCode.conversationNotFound,
         message: 'Conversation not found',
+      );
+    }
+    if (!server._members(body.conversationId).contains(userId)) {
+      throw const ApiError(
+        status: 403,
+        code: ApiErrorCode.notAMember,
+        message: 'Not a member',
       );
     }
     final expected = <DeviceRef>[

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/auth/session.dart';
 import '../../core/db/app_database.dart';
 import '../../core/db/db_opener.dart';
+import '../../router.dart';
 import '../profile/widgets/avatar_editor.dart';
 import 'chat_format.dart';
 import 'messaging_service.dart';
@@ -79,30 +81,54 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     final myId = ref.watch(sessionProvider.select((s) => s.me?.id));
     final title = conversation == null ? '' : chatTitle(conversation, peer);
     final theme = Theme.of(context);
+    final isGroup = conversation?.kind == ConversationKind.group;
+    final active = conversation?.active ?? true;
+    final typingLabel = typing.isEmpty
+        ? null
+        : !isGroup
+            ? 'typing…'
+            : typing.length == 1
+                ? '${userLabel(ref.watch(_userProvider(typing.first)).value)} is typing…'
+                : '${typing.length} people are typing…';
 
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
-        title: Row(
-          children: [
-            Avatar(url: peer?.avatarThumbUrl, name: title, radius: 18),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  if (typing.isNotEmpty)
-                    Text(
-                      'typing…',
-                      key: const Key('typing'),
-                      style: theme.textTheme.labelMedium
-                          ?.copyWith(color: theme.colorScheme.primary),
-                    ),
-                ],
+        title: InkWell(
+          key: const Key('conversation-header'),
+          onTap: isGroup ? () => context.push(Routes.groupInfoOf(_id)) : null,
+          child: Row(
+            children: [
+              if (isGroup)
+                const GroupAvatar(radius: 18)
+              else
+                Avatar(url: peer?.avatarThumbUrl, name: title, radius: 18),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    if (typingLabel != null)
+                      Text(
+                        typingLabel,
+                        key: const Key('typing'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelMedium
+                            ?.copyWith(color: theme.colorScheme.primary),
+                      )
+                    else if (isGroup)
+                      Text(
+                        'Tap for group info',
+                        style: theme.textTheme.labelMedium
+                            ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
       body: Column(
@@ -113,14 +139,32 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                 : _MessageList(
                     messages: messages,
                     myId: myId,
+                    showSenders: isGroup,
                     onRetry: _messaging.retry,
                   ),
           ),
-          _Composer(
-            controller: _text,
-            onChanged: (t) => _messaging.composerChanged(_id, t),
-            onSend: _send,
-          ),
+          if (active)
+            _Composer(
+              controller: _text,
+              onChanged: (t) => _messaging.composerChanged(_id, t),
+              onSend: _send,
+            )
+          else
+            SafeArea(
+              top: false,
+              child: Container(
+                key: const Key('not-a-member'),
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                color: theme.colorScheme.surfaceContainer,
+                child: Text(
+                  "You're no longer a member of this group.",
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -128,11 +172,19 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
 }
 
 class _MessageList extends StatelessWidget {
-  const _MessageList({required this.messages, required this.myId, required this.onRetry});
+  const _MessageList({
+    required this.messages,
+    required this.myId,
+    required this.onRetry,
+    this.showSenders = false,
+  });
 
   final List<Message> messages;
   final String? myId;
   final void Function(String id) onRetry;
+
+  /// Groups: name the sender above the first of their consecutive bubbles.
+  final bool showSenders;
 
   @override
   Widget build(BuildContext context) {
@@ -162,6 +214,10 @@ class _MessageList extends StatelessWidget {
         final m = messages[index];
         final previous = index > 0 ? messages[index - 1] : null;
         final newDay = previous == null || !sameDay(previous.sentAt, m.sentAt);
+        final mine = m.senderUserId == myId;
+        final continued = !newDay &&
+            previous.kind == MessageKind.text &&
+            previous.senderUserId == m.senderUserId;
         return Column(
           children: [
             if (newDay) _DaySeparator(label: dayLabel(m.sentAt)),
@@ -171,7 +227,8 @@ class _MessageList extends StatelessWidget {
               _Bubble(
                 key: ValueKey('msg-${m.id}'),
                 message: m,
-                mine: m.senderUserId == myId,
+                mine: mine,
+                senderId: showSenders && !mine && !continued ? m.senderUserId : null,
                 onRetry: () => onRetry(m.id),
               ),
           ],
@@ -182,11 +239,20 @@ class _MessageList extends StatelessWidget {
 }
 
 class _Bubble extends StatelessWidget {
-  const _Bubble({super.key, required this.message, required this.mine, required this.onRetry});
+  const _Bubble({
+    super.key,
+    required this.message,
+    required this.mine,
+    required this.onRetry,
+    this.senderId,
+  });
 
   final Message message;
   final bool mine;
   final VoidCallback onRetry;
+
+  /// Shown as a colored name on top (incoming group messages).
+  final String? senderId;
 
   @override
   Widget build(BuildContext context) {
@@ -210,6 +276,12 @@ class _Bubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (senderId != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              widthFactor: 1,
+              child: _SenderName(userId: senderId!),
+            ),
           Align(
             alignment: Alignment.centerLeft,
             widthFactor: 1,
@@ -250,6 +322,31 @@ class _Bubble extends StatelessWidget {
               ),
             )
           : bubble,
+    );
+  }
+}
+
+class _SenderName extends ConsumerWidget {
+  const _SenderName({required this.userId});
+
+  final String userId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final user = ref.watch(_userProvider(userId)).value;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Text(
+        userLabel(user),
+        key: Key('sender-$userId'),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: theme.textTheme.labelMedium?.copyWith(
+          color: senderColor(userId, theme.colorScheme),
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 }

@@ -169,6 +169,16 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.only(bottom: 24),
           children: [
+            ListTile(
+              key: const Key('new-group'),
+              leading: CircleAvatar(
+                backgroundColor: theme.colorScheme.primary,
+                foregroundColor: theme.colorScheme.onPrimary,
+                child: const Icon(Icons.group_add),
+              ),
+              title: const Text('New group'),
+              onTap: () => context.pushReplacement(Routes.newGroup),
+            ),
             sectionTitle('Find by phone number'),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),

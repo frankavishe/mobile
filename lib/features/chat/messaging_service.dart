@@ -14,6 +14,7 @@ import '../../core/auth/session.dart';
 import '../../core/crypto/envelope_cipher.dart';
 import '../../core/db/app_database.dart';
 import '../../core/db/db_opener.dart';
+import '../../core/phone.dart';
 import '../../core/realtime/socket_service.dart';
 import 'payload.dart';
 
@@ -77,7 +78,12 @@ class MessagingService {
     _subs
       ..add(_socket.envelopeNew.listen((e) => _receive([e])))
       ..add(_socket.connected.listen((_) => sync()))
-      ..add(_socket.conversationUpdated.listen(_onConversationUpdated))
+      ..add(_socket.conversationUpdated.listen((e) {
+        _onConversationUpdated(e).catchError((Object err) {
+          // E.g. the database closed on sign-out; the next sync catches up.
+          debugPrint('messaging: conversation update failed: $err');
+        });
+      }))
       ..add(_socket.typing.listen(_onTyping))
       ..add(_socket.profileUpdated.listen(_onProfileUpdated));
     unawaited(sync());
@@ -130,9 +136,18 @@ class MessagingService {
   Future<void> _sync() async {
     if (!_running) return;
     try {
-      for (final c in await _api.listConversations()) {
+      final current = await _api.listConversations();
+      for (final c in current) {
         if (!_running) return;
         await _saveConversation(c);
+      }
+      // Groups we were removed from while offline.
+      final ids = {for (final c in current) c.id};
+      for (final local in await _db.allConversations()) {
+        if (!_running) return;
+        if (local.kind == ConversationKind.group && local.active && !ids.contains(local.id)) {
+          await _markRemoved(local.id, 'You were removed');
+        }
       }
       cacheUsers(await _api.listContacts());
     } on api.ApiError catch (e) {
@@ -191,23 +206,44 @@ class MessagingService {
     ));
   }
 
+  /// Stores [c] and its members. For a group already known here, member changes become
+  /// system notes ("Bob joined", "Bob left").
   Future<void> _saveConversation(api.Conversation c) async {
     final me = _me();
     if (me == null) return;
-    final peer = c.type == api.ConversationType.direct
-        ? c.members.map((m) => m.userId).where((id) => id != me.userId).firstOrNull
-        : null;
-    final kind = c.type == api.ConversationType.direct
-        ? ConversationKind.direct
-        : ConversationKind.group;
+    final isGroup = c.type == api.ConversationType.group;
+    final peer = isGroup
+        ? null
+        : c.members.map((m) => m.userId).where((id) => id != me.userId).firstOrNull;
+    final kind = isGroup ? ConversationKind.group : ConversationKind.direct;
+    final memberIds = [for (final m in c.members) m.userId];
+    if (isGroup) await _fetchUsers(memberIds);
+    var someoneLeft = false;
     await _db.transaction(() async {
-      if (await _db.conversationById(c.id) == null) {
+      final local = await _db.conversationById(c.id);
+      if (local == null) {
         await _db.upsertConversation(ConversationsCompanion.insert(
           id: c.id,
           kind: kind,
           peerUserId: Value(peer),
           updatedAt: c.createdAt,
         ));
+      } else if (isGroup) {
+        final before = {for (final m in await _db.membersOf(c.id)) m.userId};
+        final after = memberIds.toSet();
+        final now = _now();
+        if (!local.active && after.contains(me.userId)) {
+          await _db.setActive(c.id, active: true);
+          await _note(c.id, 'You were added', now);
+        }
+        for (final id in after.difference(before)) {
+          if (id != me.userId) await _note(c.id, '${await _nameOf(id)} joined', now);
+        }
+        for (final id in before.difference(after)) {
+          if (id == me.userId) continue;
+          someoneLeft = true;
+          await _note(c.id, '${await _nameOf(id)} left', now);
+        }
       }
       await _db.setMembers(c.id, [
         for (final m in c.members)
@@ -218,15 +254,174 @@ class MessagingService {
           ),
       ]);
     });
+    // Members who left no longer hold back delivered/read ticks.
+    if (someoneLeft) await _db.reaggregate(c.id, me.userId);
   }
 
   Future<void> _onConversationUpdated(api.ConversationUpdatedEvent e) async {
     if (!_running) return;
     final c = e.conversation;
     if (e.removed) {
-      await _db.deleteConversation(e.id);
+      // The event for our own leave can arrive before leaveGroup() returns.
+      await _markRemoved(e.id, _leaving.contains(e.id) ? 'You left' : 'You were removed');
     } else if (c != null) {
       await _saveConversation(c);
+    }
+  }
+
+  /// Keeps the history but makes the group read-only. Nothing happens when it already is
+  /// (e.g. the server's `removed` event after we left ourselves).
+  Future<void> _markRemoved(String conversationId, String note) => _db.transaction(() async {
+        final local = await _db.conversationById(conversationId);
+        if (local == null || !local.active) return;
+        await _db.setActive(conversationId, active: false);
+        await _note(conversationId, note, _now());
+      });
+
+  Future<void> _note(String conversationId, String text, DateTime at) =>
+      _db.insertMessage(MessagesCompanion.insert(
+        id: 'note-${_uuid.v4()}',
+        conversationId: conversationId,
+        senderUserId: '',
+        senderDeviceId: '',
+        kind: const Value(MessageKind.system),
+        body: Value(text),
+        sentAt: at,
+        receivedAt: Value(at),
+        status: MessageStatus.delivered,
+      ));
+
+  /// "You", the cached name or number, else "Someone".
+  Future<String> _nameOf(String userId) async {
+    if (userId == _me()?.userId) return 'You';
+    final u = await _db.cachedUser(userId);
+    final name = u?.displayName;
+    if (name != null && name.isNotEmpty) return name;
+    final phone = u?.phone;
+    if (phone != null && phone.isNotEmpty) return formatPhone(phone);
+    return 'Someone';
+  }
+
+  /// Ids already asked for with `GET /users` this session.
+  final _requestedUsers = <String>{};
+
+  /// Caches profiles of users we have no name for (e.g. group members who aren't
+  /// contacts). Errors are ignored; each id is asked for once per session.
+  Future<void> _fetchUsers(Iterable<String> ids) async {
+    if (!_running) return;
+    final me = _me()?.userId;
+    final missing = <String>[];
+    for (final id in ids.toSet()) {
+      if (id == me || _requestedUsers.contains(id)) continue;
+      if (await _db.cachedUser(id) != null) continue;
+      missing.add(id);
+    }
+    if (missing.isEmpty) return;
+    _requestedUsers.addAll(missing);
+    try {
+      final users = await _api.getUsers(missing);
+      if (!_running) return;
+      for (final u in users) {
+        await _cacheUser(u);
+      }
+    } on api.ApiError catch (e) {
+      _requestedUsers.removeAll(missing);
+      debugPrint('messaging: user lookup failed: $e');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Groups
+  // ---------------------------------------------------------------------------
+
+  /// Creates a group with [users] (this user becomes admin), names it, and sends the
+  /// encrypted name to everyone. Returns the conversation id.
+  Future<String> createGroup(String name, List<api.PublicUser> users) async {
+    for (final u in users) {
+      await _cacheUser(u);
+    }
+    final c = await _api.createConversation(
+      api.CreateConversationBody.group([for (final u in users) u.id]),
+    );
+    await _saveConversation(c);
+    final now = _now();
+    await _db.setConversationName(c.id, name, now);
+    await _note(c.id, "You created group '$name'", now);
+    await _queueGroupUpdate(c.id, name, now);
+    return c.id;
+  }
+
+  /// Admins only. New members learn the name from a fresh `group_update`.
+  Future<void> addMembers(String conversationId, List<api.PublicUser> users) async {
+    for (final u in users) {
+      await _cacheUser(u);
+    }
+    final c = await _api.addMembers(conversationId, [for (final u in users) u.id]);
+    await _saveConversation(c);
+    final name = (await _db.conversationById(conversationId))?.name;
+    if (name != null) await _queueGroupUpdate(conversationId, name, _now());
+  }
+
+  /// Admins only.
+  Future<void> removeMember(String conversationId, String userId) async {
+    await _api.removeMember(conversationId, userId);
+    await _saveConversation(await _api.getConversation(conversationId));
+  }
+
+  /// Leaves the group; its history stays here, read-only.
+  Future<void> leaveGroup(String conversationId) async {
+    final me = _me()!;
+    _leaving.add(conversationId);
+    try {
+      await _api.removeMember(conversationId, me.userId);
+      await _markRemoved(conversationId, 'You left');
+    } finally {
+      _leaving.remove(conversationId);
+    }
+  }
+
+  /// Groups this device is leaving right now.
+  final _leaving = <String>{};
+
+  /// Admins only. Other members apply it when it is newer than the name they have.
+  Future<void> renameGroup(String conversationId, String name) async {
+    final now = _now();
+    if (!await _db.setConversationName(conversationId, name, now)) return;
+    await _note(conversationId, "You changed the group name to '$name'", now);
+    await _queueGroupUpdate(conversationId, name, now);
+  }
+
+  /// Deletes the chat and its messages from this device only.
+  Future<void> deleteConversation(String conversationId) =>
+      _db.deleteConversation(conversationId);
+
+  Future<void> _queueGroupUpdate(String conversationId, String name, DateTime at) async {
+    await _enqueue(Payload.groupUpdate(
+      messageId: _uuid.v4(),
+      conversationId: conversationId,
+      sentAt: at,
+      groupName: name,
+      groupMemberIds: [for (final m in await _db.membersOf(conversationId)) m.userId],
+    ));
+    _kickOutbox();
+  }
+
+  Future<void> _applyGroupUpdate(api.Envelope e, Payload p, {required bool fromMe}) async {
+    final local = await _db.conversationById(p.conversationId);
+    if (local == null || local.kind != ConversationKind.group) return;
+    // The server can't check encrypted metadata: only admins may change it.
+    final sender = (await _db.membersOf(p.conversationId))
+        .where((m) => m.userId == e.senderUserId)
+        .firstOrNull;
+    if (sender == null || sender.role != api.MemberRole.admin.toJson()) return;
+    final name = p.groupName!.trim();
+    if (name.isEmpty) return;
+    final previous = local.name;
+    if (!await _db.setConversationName(p.conversationId, name, p.sentAt)) return;
+    // The first name a device learns (on creation or when added) is not a change.
+    if (previous != null && previous != name) {
+      final who = fromMe ? 'You' : await _nameOf(e.senderUserId);
+      await _note(p.conversationId, "$who changed the group name to '$name'", p.sentAt);
     }
   }
 
@@ -292,6 +487,7 @@ class MessagingService {
 
   Future<void> _queueReceipt(String conversationId, ReceiptType type, List<String> ids) async {
     if (ids.isEmpty) return;
+    if ((await _db.conversationById(conversationId))?.active != true) return;
     await _enqueue(Payload.receipt(
       messageId: _uuid.v4(),
       conversationId: conversationId,
@@ -363,6 +559,12 @@ class MessagingService {
       return true;
     }
     final isText = payload.kind == PayloadKind.text;
+    final conversation = await _db.conversationById(item.conversationId);
+    if (conversation == null || !conversation.active) {
+      // We left or were removed: the server would refuse it.
+      await _fail(item, isText);
+      return true;
+    }
     try {
       await _deliver(item.conversationId, payload);
       await _db.removeOutbox(item.id);
@@ -524,6 +726,8 @@ class MessagingService {
       return null;
     }
     await _db.addDevice(e.senderUserId, e.senderDeviceId);
+    // A group member we have no name for yet.
+    if (e.senderUserId != me.userId) unawaited(_fetchUsers([e.senderUserId]));
 
     final Payload? payload;
     try {
@@ -557,6 +761,9 @@ class MessagingService {
         return _storeText(e, payload, fromMe: fromMe);
       case PayloadKind.receipt:
         await _applyReceipt(e, payload, fromMe: fromMe);
+        return null;
+      case PayloadKind.groupUpdate:
+        await _applyGroupUpdate(e, payload, fromMe: fromMe);
         return null;
     }
   }
@@ -597,6 +804,8 @@ class MessagingService {
     final me = _me()!;
     final status =
         p.receiptType == ReceiptType.read ? MessageStatus.read : MessageStatus.delivered;
+    final isGroup =
+        (await _db.conversationById(p.conversationId))?.kind == ConversationKind.group;
     for (final id in p.receiptIds) {
       final m = await _db.messageById(id);
       if (m == null || m.conversationId != p.conversationId) continue;
@@ -606,7 +815,12 @@ class MessagingService {
           await _db.updateMessageStatus(id, MessageStatus.read);
         }
       } else if (m.senderUserId == me.userId) {
-        await _db.updateMessageStatus(id, status);
+        // In a group, ticks move only once every member got there.
+        if (isGroup) {
+          await _db.applyReceipt(id, e.senderUserId, status, me.userId);
+        } else {
+          await _db.updateMessageStatus(id, status);
+        }
       }
     }
     if (fromMe) await _db.recountUnread(p.conversationId, me.userId);

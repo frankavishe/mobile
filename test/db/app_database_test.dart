@@ -32,6 +32,85 @@ void main() {
           status: status,
         );
 
+    group('groups', () {
+      Future<void> seedGroup(List<String> members) async {
+        await db.upsertConversation(ConversationsCompanion.insert(
+          id: 'c1',
+          kind: ConversationKind.group,
+          updatedAt: t0,
+        ));
+        await db.setMembers('c1', [
+          for (final u in members) MembersCompanion.insert(conversationId: 'c1', userId: u),
+        ]);
+      }
+
+      test('a message turns delivered, then read, only when every member got there', () async {
+        await seedGroup(['u1', 'u2', 'u3']);
+        await db.insertMessage(msg('m1', t0, status: MessageStatus.sent));
+        Future<MessageStatus> status() async => (await db.messageById('m1'))!.status;
+
+        await db.applyReceipt('m1', 'u2', MessageStatus.delivered, 'u1');
+        expect(await status(), MessageStatus.sent);
+        await db.applyReceipt('m1', 'u3', MessageStatus.read, 'u1');
+        expect(await status(), MessageStatus.delivered);
+        // Receipts only move forward.
+        await db.applyReceipt('m1', 'u3', MessageStatus.delivered, 'u1');
+        expect(
+          (await db.receiptsFor('m1')).firstWhere((r) => r.userId == 'u3').status,
+          MessageStatus.read,
+        );
+        await db.applyReceipt('m1', 'u2', MessageStatus.read, 'u1');
+        expect(await status(), MessageStatus.read);
+      });
+
+      test('a member who left no longer holds the ticks back', () async {
+        await seedGroup(['u1', 'u2', 'u3']);
+        await db.insertMessage(msg('m1', t0, status: MessageStatus.sent));
+        await db.applyReceipt('m1', 'u2', MessageStatus.read, 'u1');
+        expect((await db.messageById('m1'))!.status, MessageStatus.sent);
+
+        await db.setMembers('c1', [
+          for (final u in ['u1', 'u2']) MembersCompanion.insert(conversationId: 'c1', userId: u),
+        ]);
+        await db.reaggregate('c1', 'u1');
+        expect((await db.messageById('m1'))!.status, MessageStatus.read);
+      });
+
+      test('the name follows the newest update; active can be toggled', () async {
+        await seedGroup(['u1']);
+        expect(await db.setConversationName('c1', 'Trip', t0), isTrue);
+        expect(await db.setConversationName('c1', 'Older', t0.subtract(const Duration(seconds: 1))),
+            isFalse);
+        expect(await db.setConversationName('c1', 'Same time', t0), isFalse);
+        expect(await db.setConversationName('c1', 'Newer', t0.add(const Duration(seconds: 1))),
+            isTrue);
+        expect((await db.conversationById('c1'))!.name, 'Newer');
+
+        expect((await db.conversationById('c1'))!.active, isTrue);
+        await db.setActive('c1', active: false);
+        expect((await db.conversationById('c1'))!.active, isFalse);
+      });
+
+      test('members come with cached names, admins first', () async {
+        await db.upsertConversation(ConversationsCompanion.insert(
+          id: 'c1',
+          kind: ConversationKind.group,
+          updatedAt: t0,
+        ));
+        await db.setMembers('c1', [
+          MembersCompanion.insert(conversationId: 'c1', userId: 'u1'),
+          MembersCompanion.insert(conversationId: 'c1', userId: 'u2'),
+          MembersCompanion.insert(conversationId: 'c1', userId: 'u3', role: const Value('admin')),
+        ]);
+        await db.cacheUser(CachedUsersCompanion.insert(id: 'u1', displayName: const Value('Zed')));
+        await db.cacheUser(CachedUsersCompanion.insert(id: 'u2', displayName: const Value('amy')));
+        final list = await db.watchMembers('c1').first;
+        expect(list.map((m) => m.member.userId), ['u3', 'u2', 'u1']);
+        expect(list.first.isAdmin, isTrue);
+        expect(list.first.user, isNull);
+      });
+    });
+
     test('stores conversations and replaces members', () async {
       await seedConversation();
       await db.setMembers('c1', [
@@ -174,11 +253,14 @@ void main() {
     addTearDown(() => dir.delete(recursive: true));
     final file = File('${dir.path}/v1.db');
 
-    // A v1 file: today's schema without the v2 tables, marked as version 1.
+    // A v1 file: today's schema without the v2 and v3 additions, marked as version 1.
     final v2 = AppDatabase(NativeDatabase(file));
     await v2.writeKv('kept', 'yes');
     await v2.customStatement('DROP TABLE known_devices');
     await v2.customStatement('DROP TABLE cached_users');
+    await v2.customStatement('DROP TABLE receipts');
+    await v2.customStatement('ALTER TABLE conversations DROP COLUMN name_updated_at');
+    await v2.customStatement('ALTER TABLE conversations DROP COLUMN active');
     await v2.customStatement('PRAGMA user_version = 1');
     await v2.close();
 
@@ -189,6 +271,32 @@ void main() {
     expect(await upgraded.devicesOf('u'), ['d']);
     await upgraded.cacheUser(CachedUsersCompanion.insert(id: 'u'));
     expect(await upgraded.cachedUser('u'), isNotNull);
+  });
+
+  test('a version 2 database gains group state and keeps its chats', () async {
+    final dir = await Directory.systemTemp.createTemp('chat_db_migrate3');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/v2.db');
+
+    // A v2 file: today's schema without the v3 columns and table, marked as version 2.
+    final old = AppDatabase(NativeDatabase(file));
+    await old.upsertConversation(ConversationsCompanion.insert(
+      id: 'c1',
+      kind: ConversationKind.group,
+      updatedAt: DateTime.utc(2026, 11, 19),
+    ));
+    await old.customStatement('DROP TABLE receipts');
+    await old.customStatement('ALTER TABLE conversations DROP COLUMN name_updated_at');
+    await old.customStatement('ALTER TABLE conversations DROP COLUMN active');
+    await old.customStatement('PRAGMA user_version = 2');
+    await old.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final c = (await upgraded.conversationById('c1'))!;
+    expect(c.active, isTrue);
+    expect(c.nameUpdatedAt, isNull);
+    expect(await upgraded.receiptsFor('m'), isEmpty);
   });
 
   group('encrypted file', () {

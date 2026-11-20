@@ -1406,6 +1406,31 @@ class $ConversationsTable extends Conversations
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _nameUpdatedAtMeta = const VerificationMeta(
+    'nameUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> nameUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'name_updated_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _activeMeta = const VerificationMeta('active');
+  @override
+  late final GeneratedColumn<bool> active = GeneratedColumn<bool>(
+    'active',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("active" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
   static const VerificationMeta _peerUserIdMeta = const VerificationMeta(
     'peerUserId',
   );
@@ -1445,6 +1470,8 @@ class $ConversationsTable extends Conversations
     id,
     kind,
     name,
+    nameUpdatedAt,
+    active,
     peerUserId,
     updatedAt,
     unreadCount,
@@ -1470,6 +1497,21 @@ class $ConversationsTable extends Conversations
       context.handle(
         _nameMeta,
         name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    }
+    if (data.containsKey('name_updated_at')) {
+      context.handle(
+        _nameUpdatedAtMeta,
+        nameUpdatedAt.isAcceptableOrUnknown(
+          data['name_updated_at']!,
+          _nameUpdatedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('active')) {
+      context.handle(
+        _activeMeta,
+        active.isAcceptableOrUnknown(data['active']!, _activeMeta),
       );
     }
     if (data.containsKey('peer_user_id')) {
@@ -1521,6 +1563,14 @@ class $ConversationsTable extends Conversations
         DriftSqlType.string,
         data['${effectivePrefix}name'],
       ),
+      nameUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}name_updated_at'],
+      ),
+      active: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}active'],
+      )!,
       peerUserId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}peer_user_id'],
@@ -1553,6 +1603,12 @@ class LocalConversation extends DataClass
   /// Group name, learnt from encrypted `group_update` payloads.
   final String? name;
 
+  /// `sentAt` of the `group_update` that set [name]; older updates are ignored.
+  final DateTime? nameUpdatedAt;
+
+  /// False once this user left or was removed: the history stays, read-only.
+  final bool active;
+
   /// The other user of a direct chat.
   final String? peerUserId;
   final DateTime updatedAt;
@@ -1561,6 +1617,8 @@ class LocalConversation extends DataClass
     required this.id,
     required this.kind,
     this.name,
+    this.nameUpdatedAt,
+    required this.active,
     this.peerUserId,
     required this.updatedAt,
     required this.unreadCount,
@@ -1577,6 +1635,10 @@ class LocalConversation extends DataClass
     if (!nullToAbsent || name != null) {
       map['name'] = Variable<String>(name);
     }
+    if (!nullToAbsent || nameUpdatedAt != null) {
+      map['name_updated_at'] = Variable<DateTime>(nameUpdatedAt);
+    }
+    map['active'] = Variable<bool>(active);
     if (!nullToAbsent || peerUserId != null) {
       map['peer_user_id'] = Variable<String>(peerUserId);
     }
@@ -1590,6 +1652,10 @@ class LocalConversation extends DataClass
       id: Value(id),
       kind: Value(kind),
       name: name == null && nullToAbsent ? const Value.absent() : Value(name),
+      nameUpdatedAt: nameUpdatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nameUpdatedAt),
+      active: Value(active),
       peerUserId: peerUserId == null && nullToAbsent
           ? const Value.absent()
           : Value(peerUserId),
@@ -1609,6 +1675,8 @@ class LocalConversation extends DataClass
         serializer.fromJson<String>(json['kind']),
       ),
       name: serializer.fromJson<String?>(json['name']),
+      nameUpdatedAt: serializer.fromJson<DateTime?>(json['nameUpdatedAt']),
+      active: serializer.fromJson<bool>(json['active']),
       peerUserId: serializer.fromJson<String?>(json['peerUserId']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       unreadCount: serializer.fromJson<int>(json['unreadCount']),
@@ -1623,6 +1691,8 @@ class LocalConversation extends DataClass
         $ConversationsTable.$converterkind.toJson(kind),
       ),
       'name': serializer.toJson<String?>(name),
+      'nameUpdatedAt': serializer.toJson<DateTime?>(nameUpdatedAt),
+      'active': serializer.toJson<bool>(active),
       'peerUserId': serializer.toJson<String?>(peerUserId),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'unreadCount': serializer.toJson<int>(unreadCount),
@@ -1633,6 +1703,8 @@ class LocalConversation extends DataClass
     String? id,
     ConversationKind? kind,
     Value<String?> name = const Value.absent(),
+    Value<DateTime?> nameUpdatedAt = const Value.absent(),
+    bool? active,
     Value<String?> peerUserId = const Value.absent(),
     DateTime? updatedAt,
     int? unreadCount,
@@ -1640,6 +1712,10 @@ class LocalConversation extends DataClass
     id: id ?? this.id,
     kind: kind ?? this.kind,
     name: name.present ? name.value : this.name,
+    nameUpdatedAt: nameUpdatedAt.present
+        ? nameUpdatedAt.value
+        : this.nameUpdatedAt,
+    active: active ?? this.active,
     peerUserId: peerUserId.present ? peerUserId.value : this.peerUserId,
     updatedAt: updatedAt ?? this.updatedAt,
     unreadCount: unreadCount ?? this.unreadCount,
@@ -1649,6 +1725,10 @@ class LocalConversation extends DataClass
       id: data.id.present ? data.id.value : this.id,
       kind: data.kind.present ? data.kind.value : this.kind,
       name: data.name.present ? data.name.value : this.name,
+      nameUpdatedAt: data.nameUpdatedAt.present
+          ? data.nameUpdatedAt.value
+          : this.nameUpdatedAt,
+      active: data.active.present ? data.active.value : this.active,
       peerUserId: data.peerUserId.present
           ? data.peerUserId.value
           : this.peerUserId,
@@ -1665,6 +1745,8 @@ class LocalConversation extends DataClass
           ..write('id: $id, ')
           ..write('kind: $kind, ')
           ..write('name: $name, ')
+          ..write('nameUpdatedAt: $nameUpdatedAt, ')
+          ..write('active: $active, ')
           ..write('peerUserId: $peerUserId, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('unreadCount: $unreadCount')
@@ -1673,8 +1755,16 @@ class LocalConversation extends DataClass
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, kind, name, peerUserId, updatedAt, unreadCount);
+  int get hashCode => Object.hash(
+    id,
+    kind,
+    name,
+    nameUpdatedAt,
+    active,
+    peerUserId,
+    updatedAt,
+    unreadCount,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1682,6 +1772,8 @@ class LocalConversation extends DataClass
           other.id == this.id &&
           other.kind == this.kind &&
           other.name == this.name &&
+          other.nameUpdatedAt == this.nameUpdatedAt &&
+          other.active == this.active &&
           other.peerUserId == this.peerUserId &&
           other.updatedAt == this.updatedAt &&
           other.unreadCount == this.unreadCount);
@@ -1691,6 +1783,8 @@ class ConversationsCompanion extends UpdateCompanion<LocalConversation> {
   final Value<String> id;
   final Value<ConversationKind> kind;
   final Value<String?> name;
+  final Value<DateTime?> nameUpdatedAt;
+  final Value<bool> active;
   final Value<String?> peerUserId;
   final Value<DateTime> updatedAt;
   final Value<int> unreadCount;
@@ -1699,6 +1793,8 @@ class ConversationsCompanion extends UpdateCompanion<LocalConversation> {
     this.id = const Value.absent(),
     this.kind = const Value.absent(),
     this.name = const Value.absent(),
+    this.nameUpdatedAt = const Value.absent(),
+    this.active = const Value.absent(),
     this.peerUserId = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.unreadCount = const Value.absent(),
@@ -1708,6 +1804,8 @@ class ConversationsCompanion extends UpdateCompanion<LocalConversation> {
     required String id,
     required ConversationKind kind,
     this.name = const Value.absent(),
+    this.nameUpdatedAt = const Value.absent(),
+    this.active = const Value.absent(),
     this.peerUserId = const Value.absent(),
     required DateTime updatedAt,
     this.unreadCount = const Value.absent(),
@@ -1719,6 +1817,8 @@ class ConversationsCompanion extends UpdateCompanion<LocalConversation> {
     Expression<String>? id,
     Expression<String>? kind,
     Expression<String>? name,
+    Expression<DateTime>? nameUpdatedAt,
+    Expression<bool>? active,
     Expression<String>? peerUserId,
     Expression<DateTime>? updatedAt,
     Expression<int>? unreadCount,
@@ -1728,6 +1828,8 @@ class ConversationsCompanion extends UpdateCompanion<LocalConversation> {
       if (id != null) 'id': id,
       if (kind != null) 'kind': kind,
       if (name != null) 'name': name,
+      if (nameUpdatedAt != null) 'name_updated_at': nameUpdatedAt,
+      if (active != null) 'active': active,
       if (peerUserId != null) 'peer_user_id': peerUserId,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (unreadCount != null) 'unread_count': unreadCount,
@@ -1739,6 +1841,8 @@ class ConversationsCompanion extends UpdateCompanion<LocalConversation> {
     Value<String>? id,
     Value<ConversationKind>? kind,
     Value<String?>? name,
+    Value<DateTime?>? nameUpdatedAt,
+    Value<bool>? active,
     Value<String?>? peerUserId,
     Value<DateTime>? updatedAt,
     Value<int>? unreadCount,
@@ -1748,6 +1852,8 @@ class ConversationsCompanion extends UpdateCompanion<LocalConversation> {
       id: id ?? this.id,
       kind: kind ?? this.kind,
       name: name ?? this.name,
+      nameUpdatedAt: nameUpdatedAt ?? this.nameUpdatedAt,
+      active: active ?? this.active,
       peerUserId: peerUserId ?? this.peerUserId,
       updatedAt: updatedAt ?? this.updatedAt,
       unreadCount: unreadCount ?? this.unreadCount,
@@ -1768,6 +1874,12 @@ class ConversationsCompanion extends UpdateCompanion<LocalConversation> {
     }
     if (name.present) {
       map['name'] = Variable<String>(name.value);
+    }
+    if (nameUpdatedAt.present) {
+      map['name_updated_at'] = Variable<DateTime>(nameUpdatedAt.value);
+    }
+    if (active.present) {
+      map['active'] = Variable<bool>(active.value);
     }
     if (peerUserId.present) {
       map['peer_user_id'] = Variable<String>(peerUserId.value);
@@ -1790,6 +1902,8 @@ class ConversationsCompanion extends UpdateCompanion<LocalConversation> {
           ..write('id: $id, ')
           ..write('kind: $kind, ')
           ..write('name: $name, ')
+          ..write('nameUpdatedAt: $nameUpdatedAt, ')
+          ..write('active: $active, ')
           ..write('peerUserId: $peerUserId, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('unreadCount: $unreadCount, ')
@@ -3658,6 +3772,280 @@ class CachedUsersCompanion extends UpdateCompanion<CachedUser> {
   }
 }
 
+class $ReceiptsTable extends Receipts with TableInfo<$ReceiptsTable, Receipt> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ReceiptsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _messageIdMeta = const VerificationMeta(
+    'messageId',
+  );
+  @override
+  late final GeneratedColumn<String> messageId = GeneratedColumn<String>(
+    'message_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES messages (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+    'user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<MessageStatus, String> status =
+      GeneratedColumn<String>(
+        'status',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      ).withConverter<MessageStatus>($ReceiptsTable.$converterstatus);
+  @override
+  List<GeneratedColumn> get $columns => [messageId, userId, status];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'receipts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Receipt> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('message_id')) {
+      context.handle(
+        _messageIdMeta,
+        messageId.isAcceptableOrUnknown(data['message_id']!, _messageIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_messageIdMeta);
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {messageId, userId};
+  @override
+  Receipt map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Receipt(
+      messageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}message_id'],
+      )!,
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}user_id'],
+      )!,
+      status: $ReceiptsTable.$converterstatus.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}status'],
+        )!,
+      ),
+    );
+  }
+
+  @override
+  $ReceiptsTable createAlias(String alias) {
+    return $ReceiptsTable(attachedDatabase, alias);
+  }
+
+  static JsonTypeConverter2<MessageStatus, String, String> $converterstatus =
+      const EnumNameConverter<MessageStatus>(MessageStatus.values);
+}
+
+class Receipt extends DataClass implements Insertable<Receipt> {
+  final String messageId;
+  final String userId;
+  final MessageStatus status;
+  const Receipt({
+    required this.messageId,
+    required this.userId,
+    required this.status,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['message_id'] = Variable<String>(messageId);
+    map['user_id'] = Variable<String>(userId);
+    {
+      map['status'] = Variable<String>(
+        $ReceiptsTable.$converterstatus.toSql(status),
+      );
+    }
+    return map;
+  }
+
+  ReceiptsCompanion toCompanion(bool nullToAbsent) {
+    return ReceiptsCompanion(
+      messageId: Value(messageId),
+      userId: Value(userId),
+      status: Value(status),
+    );
+  }
+
+  factory Receipt.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Receipt(
+      messageId: serializer.fromJson<String>(json['messageId']),
+      userId: serializer.fromJson<String>(json['userId']),
+      status: $ReceiptsTable.$converterstatus.fromJson(
+        serializer.fromJson<String>(json['status']),
+      ),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'messageId': serializer.toJson<String>(messageId),
+      'userId': serializer.toJson<String>(userId),
+      'status': serializer.toJson<String>(
+        $ReceiptsTable.$converterstatus.toJson(status),
+      ),
+    };
+  }
+
+  Receipt copyWith({
+    String? messageId,
+    String? userId,
+    MessageStatus? status,
+  }) => Receipt(
+    messageId: messageId ?? this.messageId,
+    userId: userId ?? this.userId,
+    status: status ?? this.status,
+  );
+  Receipt copyWithCompanion(ReceiptsCompanion data) {
+    return Receipt(
+      messageId: data.messageId.present ? data.messageId.value : this.messageId,
+      userId: data.userId.present ? data.userId.value : this.userId,
+      status: data.status.present ? data.status.value : this.status,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Receipt(')
+          ..write('messageId: $messageId, ')
+          ..write('userId: $userId, ')
+          ..write('status: $status')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(messageId, userId, status);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Receipt &&
+          other.messageId == this.messageId &&
+          other.userId == this.userId &&
+          other.status == this.status);
+}
+
+class ReceiptsCompanion extends UpdateCompanion<Receipt> {
+  final Value<String> messageId;
+  final Value<String> userId;
+  final Value<MessageStatus> status;
+  final Value<int> rowid;
+  const ReceiptsCompanion({
+    this.messageId = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.status = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ReceiptsCompanion.insert({
+    required String messageId,
+    required String userId,
+    required MessageStatus status,
+    this.rowid = const Value.absent(),
+  }) : messageId = Value(messageId),
+       userId = Value(userId),
+       status = Value(status);
+  static Insertable<Receipt> custom({
+    Expression<String>? messageId,
+    Expression<String>? userId,
+    Expression<String>? status,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (messageId != null) 'message_id': messageId,
+      if (userId != null) 'user_id': userId,
+      if (status != null) 'status': status,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ReceiptsCompanion copyWith({
+    Value<String>? messageId,
+    Value<String>? userId,
+    Value<MessageStatus>? status,
+    Value<int>? rowid,
+  }) {
+    return ReceiptsCompanion(
+      messageId: messageId ?? this.messageId,
+      userId: userId ?? this.userId,
+      status: status ?? this.status,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (messageId.present) {
+      map['message_id'] = Variable<String>(messageId.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(
+        $ReceiptsTable.$converterstatus.toSql(status.value),
+      );
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ReceiptsCompanion(')
+          ..write('messageId: $messageId, ')
+          ..write('userId: $userId, ')
+          ..write('status: $status, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3675,6 +4063,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $OutboxTable outbox = $OutboxTable(this);
   late final $KnownDevicesTable knownDevices = $KnownDevicesTable(this);
   late final $CachedUsersTable cachedUsers = $CachedUsersTable(this);
+  late final $ReceiptsTable receipts = $ReceiptsTable(this);
   late final Index messagesByConversation = Index(
     'messages_by_conversation',
     'CREATE INDEX messages_by_conversation ON messages (conversation_id, sent_at)',
@@ -3696,6 +4085,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     outbox,
     knownDevices,
     cachedUsers,
+    receipts,
     messagesByConversation,
   ];
   @override
@@ -3713,6 +4103,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('messages', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'messages',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('receipts', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -4630,6 +5027,8 @@ typedef $$ConversationsTableCreateCompanionBuilder =
       required String id,
       required ConversationKind kind,
       Value<String?> name,
+      Value<DateTime?> nameUpdatedAt,
+      Value<bool> active,
       Value<String?> peerUserId,
       required DateTime updatedAt,
       Value<int> unreadCount,
@@ -4640,6 +5039,8 @@ typedef $$ConversationsTableUpdateCompanionBuilder =
       Value<String> id,
       Value<ConversationKind> kind,
       Value<String?> name,
+      Value<DateTime?> nameUpdatedAt,
+      Value<bool> active,
       Value<String?> peerUserId,
       Value<DateTime> updatedAt,
       Value<int> unreadCount,
@@ -4716,6 +5117,16 @@ class $$ConversationsTableFilterComposer
 
   ColumnFilters<String> get name => $composableBuilder(
     column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get nameUpdatedAt => $composableBuilder(
+    column: $table.nameUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get active => $composableBuilder(
+    column: $table.active,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4809,6 +5220,16 @@ class $$ConversationsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get nameUpdatedAt => $composableBuilder(
+    column: $table.nameUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get active => $composableBuilder(
+    column: $table.active,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get peerUserId => $composableBuilder(
     column: $table.peerUserId,
     builder: (column) => ColumnOrderings(column),
@@ -4842,6 +5263,14 @@ class $$ConversationsTableAnnotationComposer
 
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get nameUpdatedAt => $composableBuilder(
+    column: $table.nameUpdatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get active =>
+      $composableBuilder(column: $table.active, builder: (column) => column);
 
   GeneratedColumn<String> get peerUserId => $composableBuilder(
     column: $table.peerUserId,
@@ -4938,6 +5367,8 @@ class $$ConversationsTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<ConversationKind> kind = const Value.absent(),
                 Value<String?> name = const Value.absent(),
+                Value<DateTime?> nameUpdatedAt = const Value.absent(),
+                Value<bool> active = const Value.absent(),
                 Value<String?> peerUserId = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> unreadCount = const Value.absent(),
@@ -4946,6 +5377,8 @@ class $$ConversationsTableTableManager
                 id: id,
                 kind: kind,
                 name: name,
+                nameUpdatedAt: nameUpdatedAt,
+                active: active,
                 peerUserId: peerUserId,
                 updatedAt: updatedAt,
                 unreadCount: unreadCount,
@@ -4956,6 +5389,8 @@ class $$ConversationsTableTableManager
                 required String id,
                 required ConversationKind kind,
                 Value<String?> name = const Value.absent(),
+                Value<DateTime?> nameUpdatedAt = const Value.absent(),
+                Value<bool> active = const Value.absent(),
                 Value<String?> peerUserId = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> unreadCount = const Value.absent(),
@@ -4964,6 +5399,8 @@ class $$ConversationsTableTableManager
                 id: id,
                 kind: kind,
                 name: name,
+                nameUpdatedAt: nameUpdatedAt,
+                active: active,
                 peerUserId: peerUserId,
                 updatedAt: updatedAt,
                 unreadCount: unreadCount,
@@ -5377,6 +5814,25 @@ final class $$MessagesTableReferences
       manager.$state.copyWith(prefetchedData: [item]),
     );
   }
+
+  static MultiTypedResultKey<$ReceiptsTable, List<Receipt>> _receiptsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.receipts,
+    aliasName: 'messages__id__receipts__message_id',
+  );
+
+  $$ReceiptsTableProcessedTableManager get receiptsRefs {
+    final manager = $$ReceiptsTableTableManager(
+      $_db,
+      $_db.receipts,
+    ).filter((f) => f.messageId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_receiptsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$MessagesTableFilterComposer
@@ -5451,6 +5907,31 @@ class $$MessagesTableFilterComposer
           ),
     );
     return composer;
+  }
+
+  Expression<bool> receiptsRefs(
+    Expression<bool> Function($$ReceiptsTableFilterComposer f) f,
+  ) {
+    final $$ReceiptsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.receipts,
+      getReferencedColumn: (t) => t.messageId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ReceiptsTableFilterComposer(
+            $db: $db,
+            $table: $db.receipts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
   }
 }
 
@@ -5588,6 +6069,31 @@ class $$MessagesTableAnnotationComposer
     );
     return composer;
   }
+
+  Expression<T> receiptsRefs<T extends Object>(
+    Expression<T> Function($$ReceiptsTableAnnotationComposer a) f,
+  ) {
+    final $$ReceiptsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.receipts,
+      getReferencedColumn: (t) => t.messageId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ReceiptsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.receipts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$MessagesTableTableManager
@@ -5603,7 +6109,7 @@ class $$MessagesTableTableManager
           $$MessagesTableUpdateCompanionBuilder,
           (Message, $$MessagesTableReferences),
           Message,
-          PrefetchHooks Function({bool conversationId})
+          PrefetchHooks Function({bool conversationId, bool receiptsRefs})
         > {
   $$MessagesTableTableManager(_$AppDatabase db, $MessagesTable table)
     : super(
@@ -5672,47 +6178,69 @@ class $$MessagesTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({conversationId = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [],
-              addJoins:
-                  <
-                    T extends TableManagerState<
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic
-                    >
-                  >(state) {
-                    if (conversationId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.conversationId,
-                                referencedTable: $$MessagesTableReferences
-                                    ._conversationIdTable(db),
-                                referencedColumn: $$MessagesTableReferences
-                                    ._conversationIdTable(db)
-                                    .id,
-                              )
-                              as T;
-                    }
+          prefetchHooksCallback:
+              ({conversationId = false, receiptsRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [if (receiptsRefs) db.receipts],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (conversationId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.conversationId,
+                                    referencedTable: $$MessagesTableReferences
+                                        ._conversationIdTable(db),
+                                    referencedColumn: $$MessagesTableReferences
+                                        ._conversationIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
 
-                    return state;
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (receiptsRefs)
+                        await $_getPrefetchedDataByColumns<
+                          Message,
+                          $MessagesTable,
+                          Receipt,
+                          $ReceiptsTable
+                        >(
+                          currentTable: table,
+                          referencedTable: $$MessagesTableReferences
+                              ._receiptsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$MessagesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).receiptsRefs,
+                          currentColumn: 'id',
+                          referencedColumn: 'message_id',
+                          typedResults: items,
+                        ),
+                    ];
                   },
-              getPrefetchedDataCallback: (items) async {
-                return [];
+                );
               },
-            );
-          },
         ),
       );
 }
@@ -5729,7 +6257,7 @@ typedef $$MessagesTableProcessedTableManager =
       $$MessagesTableUpdateCompanionBuilder,
       (Message, $$MessagesTableReferences),
       Message,
-      PrefetchHooks Function({bool conversationId})
+      PrefetchHooks Function({bool conversationId, bool receiptsRefs})
     >;
 typedef $$OutboxTableCreateCompanionBuilder =
     OutboxCompanion Function({
@@ -6316,6 +6844,286 @@ typedef $$CachedUsersTableProcessedTableManager =
       CachedUser,
       PrefetchHooks Function()
     >;
+typedef $$ReceiptsTableCreateCompanionBuilder =
+    ReceiptsCompanion Function({
+      required String messageId,
+      required String userId,
+      required MessageStatus status,
+      Value<int> rowid,
+    });
+typedef $$ReceiptsTableUpdateCompanionBuilder =
+    ReceiptsCompanion Function({
+      Value<String> messageId,
+      Value<String> userId,
+      Value<MessageStatus> status,
+      Value<int> rowid,
+    });
+
+final class $$ReceiptsTableReferences
+    extends BaseReferences<_$AppDatabase, $ReceiptsTable, Receipt> {
+  $$ReceiptsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $MessagesTable _messageIdTable(_$AppDatabase db) =>
+      db.messages.createAlias('receipts__message_id__messages__id');
+
+  $$MessagesTableProcessedTableManager get messageId {
+    final $_column = $_itemColumn<String>('message_id')!;
+
+    final manager = $$MessagesTableTableManager(
+      $_db,
+      $_db.messages,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_messageIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$ReceiptsTableFilterComposer
+    extends Composer<_$AppDatabase, $ReceiptsTable> {
+  $$ReceiptsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<MessageStatus, MessageStatus, String>
+  get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  $$MessagesTableFilterComposer get messageId {
+    final $$MessagesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messages,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessagesTableFilterComposer(
+            $db: $db,
+            $table: $db.messages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ReceiptsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ReceiptsTable> {
+  $$ReceiptsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$MessagesTableOrderingComposer get messageId {
+    final $$MessagesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messages,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessagesTableOrderingComposer(
+            $db: $db,
+            $table: $db.messages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ReceiptsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ReceiptsTable> {
+  $$ReceiptsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<MessageStatus, String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  $$MessagesTableAnnotationComposer get messageId {
+    final $$MessagesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messages,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessagesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.messages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ReceiptsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ReceiptsTable,
+          Receipt,
+          $$ReceiptsTableFilterComposer,
+          $$ReceiptsTableOrderingComposer,
+          $$ReceiptsTableAnnotationComposer,
+          $$ReceiptsTableCreateCompanionBuilder,
+          $$ReceiptsTableUpdateCompanionBuilder,
+          (Receipt, $$ReceiptsTableReferences),
+          Receipt,
+          PrefetchHooks Function({bool messageId})
+        > {
+  $$ReceiptsTableTableManager(_$AppDatabase db, $ReceiptsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ReceiptsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ReceiptsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ReceiptsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> messageId = const Value.absent(),
+                Value<String> userId = const Value.absent(),
+                Value<MessageStatus> status = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ReceiptsCompanion(
+                messageId: messageId,
+                userId: userId,
+                status: status,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String messageId,
+                required String userId,
+                required MessageStatus status,
+                Value<int> rowid = const Value.absent(),
+              }) => ReceiptsCompanion.insert(
+                messageId: messageId,
+                userId: userId,
+                status: status,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$ReceiptsTable, Receipt>(table),
+                  $$ReceiptsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({messageId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (messageId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.messageId,
+                                referencedTable: $$ReceiptsTableReferences
+                                    ._messageIdTable(db),
+                                referencedColumn: $$ReceiptsTableReferences
+                                    ._messageIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$ReceiptsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ReceiptsTable,
+      Receipt,
+      $$ReceiptsTableFilterComposer,
+      $$ReceiptsTableOrderingComposer,
+      $$ReceiptsTableAnnotationComposer,
+      $$ReceiptsTableCreateCompanionBuilder,
+      $$ReceiptsTableUpdateCompanionBuilder,
+      (Receipt, $$ReceiptsTableReferences),
+      Receipt,
+      PrefetchHooks Function({bool messageId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -6343,4 +7151,6 @@ class $AppDatabaseManager {
       $$KnownDevicesTableTableManager(_db, _db.knownDevices);
   $$CachedUsersTableTableManager get cachedUsers =>
       $$CachedUsersTableTableManager(_db, _db.cachedUsers);
+  $$ReceiptsTableTableManager get receipts =>
+      $$ReceiptsTableTableManager(_db, _db.receipts);
 }

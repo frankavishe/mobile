@@ -113,3 +113,14 @@ final class CreateGroupConversation extends CreateConversationBody {
   @override
   Map<String, dynamic> toJson() => {'type': 'group', 'memberIds': memberIds};
 }
+
+/// `AddMembersBody` for `POST /conversations/{id}/members`.
+@immutable
+class AddMembersBody {
+  const AddMembersBody(this.userIds);
+
+  /// 1–63 users; the group holds at most 64 members.
+  final List<String> userIds;
+
+  Map<String, dynamic> toJson() => {'userIds': userIds};
+}

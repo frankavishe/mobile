@@ -49,10 +49,17 @@ class _ChatTile extends StatelessWidget {
     final unread = c.unreadCount;
     final mine = last != null && last.senderUserId == myId && last.kind == MessageKind.text;
     final muted = theme.colorScheme.onSurfaceVariant;
+    final isGroup = c.kind == ConversationKind.group;
+    // "You: hi" / "Alice: hi" in groups.
+    final prefix = isGroup && last != null && last.kind == MessageKind.text
+        ? (mine ? 'You: ' : '${userLabel(summary.lastSender)}: ')
+        : '';
 
     return ListTile(
       key: ValueKey('chat-${c.id}'),
-      leading: Avatar(url: summary.peer?.avatarThumbUrl, name: title),
+      leading: isGroup
+          ? const GroupAvatar()
+          : Avatar(url: summary.peer?.avatarThumbUrl, name: title),
       title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Row(
         children: [
@@ -62,7 +69,7 @@ class _ChatTile extends StatelessWidget {
           ],
           Expanded(
             child: Text(
-              last?.body ?? '',
+              '$prefix${last?.body ?? ''}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: last?.kind == MessageKind.system

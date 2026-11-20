@@ -149,6 +149,39 @@ class FakeMessagingService implements MessagingService {
     return 'm${sentTexts.length}';
   }
 
+  /// [createGroup] answers [groupId].
+  String groupId = 'g-new';
+  final createdGroups = <(String, List<String>)>[];
+  final added = <(String, List<String>)>[];
+  final removed = <(String, String)>[];
+  final renamed = <(String, String)>[];
+  final left = <String>[];
+  final deleted = <String>[];
+
+  @override
+  Future<String> createGroup(String name, List<PublicUser> users) async {
+    createdGroups.add((name, [for (final u in users) u.id]));
+    return groupId;
+  }
+
+  @override
+  Future<void> addMembers(String conversationId, List<PublicUser> users) async =>
+      added.add((conversationId, [for (final u in users) u.id]));
+
+  @override
+  Future<void> removeMember(String conversationId, String userId) async =>
+      removed.add((conversationId, userId));
+
+  @override
+  Future<void> renameGroup(String conversationId, String name) async =>
+      renamed.add((conversationId, name));
+
+  @override
+  Future<void> leaveGroup(String conversationId) async => left.add(conversationId);
+
+  @override
+  Future<void> deleteConversation(String conversationId) async => deleted.add(conversationId);
+
   @override
   Future<void> openConversation(String conversationId) async => opened.add(conversationId);
 

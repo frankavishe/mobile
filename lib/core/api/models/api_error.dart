@@ -7,6 +7,7 @@ enum ApiErrorCode {
   tooManyAttempts('TOO_MANY_ATTEMPTS'),
   accountNotFound('ACCOUNT_NOT_FOUND'),
   userNotFound('USER_NOT_FOUND'),
+  notFound('NOT_FOUND'),
   deviceNotFound('DEVICE_NOT_FOUND'),
   sessionRevoked('SESSION_REVOKED'),
   unauthorized('UNAUTHORIZED'),
